@@ -1,7 +1,8 @@
 # DueSoon — Foundational Codex Context
 
-> **Status: foundational product specification and learning base**  
-> **Audience: Codex and every engineer or agent working in the Odysseus-based DueSoon repository**  
+> **Status: foundational product specification and learning base**
+>
+> **Audience: Codex and every engineer or agent working in the Odysseus-based DueSoon repository**
 > **Primary implementation target: the new DueSoon repository forked from Odysseus**
 
 ## IMPORTANT: READ THIS FIRST
