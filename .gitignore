@@ -102,3 +102,8 @@ compound.config.json
 *.error.log
 _scratch/
 /odysseus/
+
+# Project-local Codex skill installation state. Keep third-party executable
+# instructions local; source changes must not vendor an unreviewed skill bundle.
+.agents/
+skills-lock.json

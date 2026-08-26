@@ -40,7 +40,7 @@ Codex and other coding agents must:
 9. Use AI only for bounded interpretation tasks and validate its outputs before they can affect reminders.
 10. Never simplify DueSoon back into a basic notifier that trusts only Canvas `due_at`.
 11. Never delete or rewrite the legacy DueSoon repository as part of the Odysseus migration.
-12. Never reintroduce WhatsApp, Telegram, iMessage, or another delivery provider unless the owner explicitly requests it. The current provider is Twilio SMS.
+12. Use private ntfy delivery as the primary notification path. Keep Twilio SMS only as an optional future adapter explicitly enabled by the owner; do not add WhatsApp, Telegram, or iMessage without an explicit specification change.
 
 If code and this document conflict, stop and determine whether the code is incomplete/outdated or the specification needs an explicit amendment. Do not silently choose one.
 
@@ -219,8 +219,9 @@ flowchart LR
     Urgency --> Schedule
     Schedule --> Recheck[Immediate Canvas Submission Recheck]
     Recheck -->|submitted / graded| Suppress[Suppress + Audit]
-    Recheck -->|not submitted| Notify[Twilio SMS Adapter]
-    Notify --> Phone[Student Phone]
+    Recheck -->|not submitted| Notify[Notification Adapter]
+    Notify --> Ntfy[Private ntfy Topic]
+    Ntfy --> Phone[iPhone via APNs]
 
     API[FastAPI Control + Inspection API] <--> Raw
     API <--> Evidence
@@ -258,7 +259,7 @@ sequenceDiagram
     participant DB as Database
     participant C as Canvas
     participant U as Urgency Engine
-    participant T as Twilio
+    participant T as ntfy
 
     S->>DB: Claim due reminder event atomically
     DB-->>S: Claimed or already processed
@@ -275,8 +276,8 @@ sequenceDiagram
         alt dry-run
             S->>DB: Mark would_send and save rendered body
         else live
-            S->>T: Send SMS with API-key auth
-            T-->>S: Message SID or error
+            S->>T: Publish with bearer-token auth
+            T-->>S: Message ID or error
             S->>DB: Persist sent/failed result
         end
     end
@@ -287,18 +288,22 @@ sequenceDiagram
 The initial deployment should favor reliability and operational simplicity:
 
 ```text
-Docker Compose
-├── duesoon-app
-│   ├── FastAPI
-│   ├── Canvas sync loop
-│   ├── ingestion workers
-│   └── one scheduler instance
-├── persistent-volume
-│   └── duesoon.sqlite3
-└── optional reverse proxy / host scheduler
+Azure Linux VM
+└── Docker Compose
+    ├── duesoon-app
+    │   ├── FastAPI
+    │   ├── Canvas sync loop
+    │   ├── ingestion workers
+    │   └── exactly one scheduler instance
+    ├── attached managed-disk mount
+    │   └── duesoon.sqlite3
+    ├── ntfy
+    │   ├── persistent cache and authentication database
+    │   └── iPhone delivery through ntfy's APNs upstream
+    └── HTTPS reverse proxy / Azure ingress boundary
 ```
 
-For SQLite, run **exactly one scheduling worker**. Do not scale the application horizontally while each replica runs its own in-process scheduler. If later scaling requires multiple processes, split scheduling into a dedicated worker and use a database that supports the required concurrency and leases.
+For SQLite, run **exactly one scheduling worker**. Store SQLite on a filesystem mounted from an Azure managed disk, not Azure Files or another network file share. Do not scale the application horizontally while each replica runs its own in-process scheduler. If later scaling requires multiple processes, split scheduling into a dedicated worker and use a database that supports the required concurrency and leases.
 
 ---
 
@@ -622,7 +627,7 @@ This conservative behavior minimizes the harm of missing an earlier real deadlin
 - submission-state checks;
 - deduplication and atomic event claiming;
 - retry policy and dead-letter/failure state;
-- SMS rendering, sending, and Twilio status recording;
+- notification rendering, sending, and provider status recording;
 - dry-run behavior; and
 - metrics, health checks, and audit logging.
 
@@ -637,7 +642,7 @@ This conservative behavior minimizes the harm of missing an earlier real deadlin
 ### 9.3 AI must not
 
 - perform timestamp or score arithmetic that ordinary code can do exactly;
-- send an SMS;
+- send a notification;
 - decide that a database uniqueness rule may be bypassed;
 - read secrets or include them in prompts;
 - execute instructions embedded in course content;
@@ -887,7 +892,7 @@ On first observation of an assignment already inside a checkpoint window, create
 
 ### 12.6 Pre-send Canvas submission recheck
 
-Immediately before every live SMS attempt, fetch the current Canvas submission state for that assignment.
+Immediately before every live notification attempt, fetch the current Canvas submission state for that assignment.
 
 - If clearly `submitted` or `graded`, suppress the reminder and cancel pending events.
 - If `not_submitted`, `missing`, or `late`, continue.
@@ -908,7 +913,7 @@ An adaptive reminder key should include:
 (effective_assignment_id, deadline_version, interval_start_checkpoint, interval_end_checkpoint, reminder_kind)
 ```
 
-Twilio timeouts create an ambiguous-delivery risk. Persist an outbound attempt ID before calling Twilio, reuse a stable idempotency/reference identifier where supported, and reconcile Twilio status by Message SID. Do not blindly retry an unknown result in a way likely to duplicate the SMS.
+Notification timeouts create an ambiguous-delivery risk. Persist an outbound attempt ID before calling ntfy or another adapter, reuse a stable idempotency/reference identifier where supported, and reconcile provider status by provider message ID. Do not blindly retry an unknown result in a way likely to duplicate the notification.
 
 ### 12.8 Reminder event statuses
 
@@ -995,39 +1000,39 @@ Example:
 Before: due in 18 hours, urgency 35
 Change: instructor moves deadline to 4 hours from now
 After: urgency 81
-Action: one adaptive “deadline moved earlier” SMS now
+Action: one adaptive “deadline moved earlier” notification now
 ```
 
 Future personalization may change adaptive timing, but it must respect hard safety caps, quiet hours, explainability, and user-configurable limits.
 
 ---
 
-## 15. Notification Delivery: Twilio SMS
+## 15. Notification Delivery: ntfy Primary
 
-Twilio Programmable Messaging SMS is the required initial provider. WhatsApp, Telegram, and iMessage are out of scope unless explicitly reauthorized.
+Private ntfy delivery is the required initial provider. The production target is a self-hosted ntfy service on Azure with HTTPS, authentication, per-topic ACLs, persistent state, and iPhone delivery through ntfy's upstream APNs bridge. Twilio SMS is an optional future fallback adapter, not a prerequisite for the initial release. WhatsApp, Telegram, and iMessage are out of scope unless explicitly reauthorized.
 
-### 15.1 Authentication
+### 15.1 Authentication and iPhone delivery
 
-Use Twilio API-key authentication, not the master Auth Token:
+Use a private, unguessable topic plus bearer-token authentication. Topic secrecy alone is not access control:
 
 ```env
-TWILIO_ACCOUNT_SID=
-TWILIO_API_KEY_SID=
-TWILIO_API_KEY_SECRET=
-TWILIO_FROM_NUMBER=
-TWILIO_TO_NUMBER=
+DUESOON_NTFY_URL=https://notify.example.com
+DUESOON_NTFY_TOPIC=
+DUESOON_NTFY_TOKEN=
+NTFY_BASE_URL=https://notify.example.com
+NTFY_UPSTREAM_BASE_URL=https://ntfy.sh
 ```
 
-- `TWILIO_ACCOUNT_SID` identifies the account.
-- `TWILIO_API_KEY_SID` and `TWILIO_API_KEY_SECRET` authenticate the application.
-- `TWILIO_FROM_NUMBER` is the Twilio SMS-capable sender.
-- `TWILIO_TO_NUMBER` is the single verified/configured recipient in E.164 format.
+- `DUESOON_NTFY_URL` is the HTTPS base URL reached by DueSoon.
+- `DUESOON_NTFY_TOPIC` is a private topic authorized for one student.
+- `DUESOON_NTFY_TOKEN` authenticates publish requests and must be stored as a secret.
+- `NTFY_UPSTREAM_BASE_URL` enables self-hosted iPhone notifications through the public ntfy APNs relay; message metadata required for delivery may transit that relay, so message content must stay concise and privacy-aware.
 
-The code must not silently fall back to `TWILIO_AUTH_TOKEN`. If local compatibility is ever added, it must be explicit, documented, and disabled by default.
+The iPhone ntfy app must subscribe to the self-hosted server and topic. Production ntfy must not allow anonymous topic listing, subscription, or publishing.
 
 ### 15.2 Message content
 
-An SMS should be concise and actionable:
+A notification should be concise and actionable:
 
 ```text
 DueSoon — HIGH (64/100)
@@ -1045,23 +1050,23 @@ Lab 4 moved from Sep 6 11:59 PM to Sep 4 11:59 PM.
 Source: professor Canvas message. Due in 5h 12m.
 ```
 
-Do not include sensitive email/document excerpts beyond what is necessary. Respect SMS length/segment cost; log the rendered segment count when available.
+Do not include grades, private email/document excerpts, tokens, or document contents beyond what is needed to identify the assignment and action.
 
 ### 15.3 Delivery behavior
 
 - Set bounded HTTP timeouts.
 - Retry only transient failures with exponential backoff and jitter.
-- Do not retry authentication, invalid-number, or permanent policy failures indefinitely.
-- Persist Twilio Message SID and provider status.
+- Do not retry authentication or permanent policy failures indefinitely.
+- Persist provider message ID and status.
 - Expose failed delivery in health/status endpoints.
-- Redact phone numbers and secrets in ordinary logs.
-- A Twilio trial may be used for initial testing, but trial restrictions are not the production design.
+- Redact topic names, tokens, host credentials, and sensitive content in ordinary logs.
+- Twilio may later be implemented behind the same adapter. If enabled, it must use API-key SID/secret authentication rather than the master Auth Token and must preserve the same deduplication and audit rules.
 
 ---
 
 ## 16. Persistence: SQLite and SQLAlchemy
 
-Use SQLite and SQLAlchemy for the initial single-user release. Use migrations (prefer the inherited mechanism or Alembic) from the first committed schema. Store the database on a persistent Docker volume and enable SQLite foreign keys. Use WAL mode only after verifying backup and platform compatibility.
+Use SQLite and SQLAlchemy for the initial single-user release. Use migrations (prefer Alembic) from the first committed schema. In Azure, store the database on a persistent path backed by an attached managed disk and mounted into the container; do not place SQLite on Azure Files. Enable SQLite foreign keys. Use WAL mode only after verifying backup and filesystem compatibility.
 
 ### 16.1 Required entities
 
@@ -1216,7 +1221,7 @@ Start the scheduler through FastAPI's application lifespan only when the process
 
 ---
 
-## 18. Docker and Operations
+## 18. Azure, Docker, and Operations
 
 Provide:
 
@@ -1231,7 +1236,7 @@ Provide:
 - database backup/restore instructions; and
 - a one-command dry-run startup path.
 
-Pin direct dependencies and use repeatable builds. Avoid downloading models or executing arbitrary install scripts at runtime. Production should run one scheduler instance until the persistence architecture changes.
+The initial production topology is one Azure Linux VM with an attached managed disk and Docker Compose. Local execution is only a development convenience and does not constrain production design. Pin direct dependencies and use repeatable builds. Avoid downloading models or executing arbitrary install scripts at runtime. Production should run one scheduler instance until the persistence architecture changes.
 
 ---
 
@@ -1263,21 +1268,23 @@ In a new fork/repository:
 4. Record baseline tests and known failures.
 5. Create the DueSoon implementation branch only after the baseline is reproducible.
 
-### 19.3 Keep from Odysseus when useful
+### 19.3 Keep and adapt from Odysseus
 
 Inspect the actual fork before deciding. Likely reusable capabilities include:
 
 - FastAPI/application scaffolding;
 - configuration validation;
 - SQLAlchemy and migration infrastructure;
-- durable background-job patterns;
+- durable background-job patterns after removing arbitrary agent/tool execution;
 - file upload, parsing, and safe text extraction;
 - model-provider abstraction and structured output support;
 - observability, logging, health checks, and error handling;
 - Docker and local development setup;
-- frontend shell and authentication if proportionate;
+- authentication if proportionate;
 - testing infrastructure; and
 - stable domain-neutral utilities.
+
+Retain concepts that support academic intelligence: Notes become assignment annotations and evidence notes; Tasks become manual academic obligations; Calendar becomes workload, course meetings, exams, and deadline clustering; Contacts become professor identities and course associations; Memory becomes typed aliases, matching feedback, source reliability, and reminder preferences. Documents become course-document evidence. Email becomes read-only professor evidence ingestion. CalDAV/CardDAV/ICS remain optional academic import/export adapters. LLM code is limited to bounded extraction and matching. Chroma may be added later for retrieval, never as authoritative truth.
 
 Reuse behavior, not brand assumptions. Add characterization tests before changing opaque inherited code.
 
@@ -1295,7 +1302,14 @@ Likely out-of-scope capabilities include:
 - generic coding tools;
 - unrelated multi-agent personas/workflows;
 - broad external tool marketplaces; and
-- unrelated UI pages.
+- unrelated UI pages;
+- generic chat agents and personas;
+- MCP and arbitrary tool execution;
+- background shell jobs, model-serving/GPU/SSH infrastructure, and Docker-socket access;
+- general web search and SearXNG;
+- image generation, galleries, editors, TTS/STT/voice, YouTube, and comparison tools;
+- Codex/Claude/Copilot companion integrations;
+- outbound email composition, automatic replies, and generic webhooks.
 
 Do not expose general-purpose tools to untrusted course content.
 
@@ -1308,8 +1322,7 @@ Evaluate and port only useful, tested concepts or code:
 - submission-state detection;
 - timezone handling;
 - reminder checkpoints and crossing logic;
-- Twilio sending and environment configuration;
-- duplicate prevention;
+- notification adapter boundaries and duplicate prevention;
 - existing fixtures/tests; and
 - hard-earned edge-case behavior.
 
@@ -1418,7 +1431,7 @@ DueSoon/
     └── restore_database.*
 ```
 
-Keep modules small and cohesive. The resolver should not send messages; Twilio code should not decide deadlines; the API should not contain scoring arithmetic.
+Keep modules small and cohesive. The resolver should not send messages; notification adapters should not decide deadlines; the API should not contain scoring arithmetic.
 
 ---
 
@@ -1437,7 +1450,7 @@ It is the foundational product specification and learning base, not optional not
 - Keep AI bounded to extraction and interpretation; deterministic code owns exact behavior.
 - Never send a reminder without an immediate Canvas submission recheck.
 - Preserve checkpoint crossing, deduplication, dry-run, and auditability.
-- Twilio SMS with API-key authentication is the active notification provider.
+- Private ntfy delivery is the active notification provider; Twilio is an optional future adapter.
 - Never expose or commit secrets or student academic content.
 - Preserve the legacy DueSoon repository and its `pre-odysseus` checkpoint.
 - Add or update tests with every behavior change.
@@ -1484,15 +1497,15 @@ Each phase should be independently demonstrable, tested, and reversible.
 
 **Exit:** simulated time produces correct would-send/suppress decisions.
 
-### Phase 3 — Twilio SMS
+### Phase 3 — ntfy delivery
 
-- implement API-key authentication and configuration validation;
+- implement bearer-token authentication, private-topic ACLs, and configuration validation;
 - add concise message templates;
-- persist attempts, Message SIDs, and failure state;
+- persist attempts, provider message IDs, and failure state;
 - add a guarded test-message path;
-- validate live delivery with one controlled test.
+- validate live iPhone delivery with one controlled test.
 
-**Exit:** one end-to-end reminder reaches the configured phone exactly once and is fully audited.
+**Exit:** one end-to-end reminder reaches the configured iPhone exactly once and is fully audited.
 
 ### Phase 4 — Canvas communications and files
 
@@ -1562,7 +1575,7 @@ Cover:
 - source authority, recency, and supersession rules;
 - conflict operational deadline selection;
 - assignment matcher thresholds; and
-- SMS rendering/segment limits.
+- notification rendering/length limits.
 
 Use an injectable clock. Tests must not depend on wall-clock time.
 
@@ -1578,19 +1591,19 @@ Cover:
 - atomic event claiming and duplicate worker attempts;
 - AI schema validation and malformed-output rejection;
 - document/email ingestion with safe fixtures;
-- Twilio success, transient failure, permanent failure, and ambiguous timeout using a fake provider; and
+- ntfy success, transient failure, permanent failure, and ambiguous timeout using a fake provider; and
 - FastAPI endpoint authorization and data redaction.
 
 ### 23.3 Contract tests
 
-Maintain recorded, scrubbed Canvas and Twilio response fixtures. Test the fields DueSoon depends on and fail clearly when upstream shapes change. Never store real tokens, phone numbers, names, grades, or private message contents in fixtures.
+Maintain recorded, scrubbed Canvas and ntfy response fixtures. Test the fields DueSoon depends on and fail clearly when upstream shapes change. Never store real tokens, topic names, hostnames, names, grades, or private message contents in fixtures.
 
 ### 23.4 End-to-end scenarios
 
 At minimum:
 
-1. Canvas exact deadline → 24h crossing → incomplete recheck → one SMS.
-2. Assignment submitted before checkpoint → no SMS.
+1. Canvas exact deadline → 24h crossing → incomplete recheck → one notification.
+2. Assignment submitted before checkpoint → no notification.
 3. Canvas deadline null + explicit professor Inbox deadline → effective deadline and reminder.
 4. Old syllabus date + newer explicit extension → extension wins.
 5. Two credible unresolved dates → conflict, earlier operational reminder, transparent explanation.
@@ -1598,7 +1611,7 @@ At minimum:
 7. Deadline moves later → old pending events cancelled, new checkpoints scheduled.
 8. Service downtime crosses 12h and 6h → one catch-up reminder.
 9. Same source ingested twice → no duplicate claim or reminder.
-10. Twilio timeout/restart → no blind duplicate send.
+10. ntfy timeout/restart → no blind duplicate send.
 11. AI provider unavailable → normal Canvas reminders still function.
 12. Malicious instruction in PDF/email → treated as text; no secret/tool access.
 
@@ -1680,9 +1693,9 @@ When `DUESOON_DRY_RUN=true`:
 - calculate urgency;
 - cross checkpoints;
 - perform submission rechecks unless explicitly using fixtures;
-- render the exact SMS body;
+- render the exact notification body;
 - persist a `would_send` reminder event;
-- do **not** call Twilio; and
+- do **not** call ntfy or any live provider; and
 - expose decisions in the API/logs with secrets and sensitive content redacted.
 
 Switching from dry-run to live mode must not accidentally replay all historical `would_send` events. Live delivery begins only with new eligible crossings after a recorded activation watermark, unless an operator explicitly requests a controlled catch-up.
@@ -1692,7 +1705,7 @@ Recommended activation process:
 1. Run fixture-backed dry-run tests.
 2. Run real Canvas dry-run for several scheduler cycles.
 3. Inspect effective deadlines, conflicts, and would-send messages.
-4. Send one guarded Twilio test SMS.
+4. Send one guarded ntfy test notification to the configured iPhone.
 5. Record live-mode activation watermark.
 6. Enable live delivery with monitoring.
 
@@ -1709,7 +1722,7 @@ Provide structured, privacy-safe logs and status data for:
 - urgency score version and breakdown;
 - reminder crossings, claims, suppression, and delivery outcome;
 - Canvas recheck age/result;
-- Twilio Message SID/status without secret content; and
+- provider message ID/status without secret content; and
 - scheduler watermark and lag.
 
 Useful metrics include:
@@ -1817,18 +1830,18 @@ Before calling an implementation production-ready, verify all applicable items:
 - [ ] Every live send performs an immediate Canvas submission recheck.
 - [ ] Submitted/graded assignments never receive later reminders.
 
-### Twilio
+### ntfy
 
-- [ ] API Key SID + Secret authentication is used.
-- [ ] Sender/recipient numbers are validated and redacted.
-- [ ] Message SID and failure state persist.
+- [ ] HTTPS, bearer-token authentication, private topics, and ACLs are used.
+- [ ] Topic, token, and server details are validated and redacted.
+- [ ] Provider message ID and failure state persist.
 - [ ] Retry behavior distinguishes transient, permanent, and ambiguous outcomes.
-- [ ] One controlled end-to-end SMS is delivered exactly once.
+- [ ] One controlled end-to-end iPhone notification is delivered exactly once.
 
 ### Persistence and runtime
 
 - [ ] Migrations work from empty and previous schemas.
-- [ ] SQLite resides on a persistent volume and is backed up/restored successfully.
+- [ ] SQLite resides on an Azure managed-disk-backed persistent mount, not Azure Files, and is backed up/restored successfully.
 - [ ] Only one scheduler instance runs.
 - [ ] Restart recovery does not duplicate or burst reminders.
 - [ ] Health checks and graceful shutdown work.
@@ -1839,7 +1852,7 @@ Before calling an implementation production-ready, verify all applicable items:
 - [ ] `.env`, database, downloaded content, and backups are ignored/protected.
 - [ ] Logs/API responses redact sensitive data.
 - [ ] Uploaded documents cannot execute active content or escape storage boundaries.
-- [ ] Dry-run executes full decisions without contacting Twilio.
+- [ ] Dry-run executes full decisions without contacting ntfy or another live provider.
 - [ ] Enabling live mode does not replay historical would-send events.
 
 ---
@@ -1859,8 +1872,8 @@ DueSoon's initial Odysseus-based release is done only when all of the following 
 9. The five checkpoint reminders use crossing logic and survive restarts without duplicates or bursts.
 10. Deadline changes reconcile schedules correctly and adaptive reminders obey strict caps.
 11. Every live reminder rechecks Canvas submission state immediately before sending.
-12. Twilio SMS uses API-key authentication, records provider outcomes, and sends exactly once in the controlled end-to-end test.
-13. Dry-run mode exercises the complete decision path without contacting Twilio and cannot replay historical simulations after activation.
+12. Private ntfy delivery uses bearer-token authentication and topic ACLs, records provider outcomes, and sends exactly once in the controlled iPhone end-to-end test.
+13. Dry-run mode exercises the complete decision path without contacting ntfy or another live provider and cannot replay historical simulations after activation.
 14. Unit, integration, contract, end-to-end, security, and AI evaluation tests cover the critical scenarios in this document.
 15. Secrets and academic data are protected in configuration, logs, storage, backups, prompts, and API responses.
 16. DueSoon can explain, for any reminder: **what it believes, why it believes it, which evidence supports it, how urgent it is, why it sent or suppressed the reminder, and which code/config versions made the decision.**

@@ -6,7 +6,7 @@
 - Curated source branch: `main`
 - Baseline commit: `451900fc151554f4c8654d1e4d3dadc1d029b047`
 - Fork repository: `https://github.com/FredoBangin/DueSoon-Odysseus.git`
-- Local checkout: `C:\Users\revxn\OneDrive\Desktop\odd`
+- Local checkout: `D:\odd`
 
 ## Remote Policy
 
@@ -17,6 +17,8 @@
 
 ## Baseline Status
 
-The source checkout and remote configuration have been verified. Dependency installation,
-database initialization, application startup, and the untouched Odysseus test suite remain
-separate baseline-verification work and must be recorded here before Phase 1 begins.
+The source checkout, remote configuration, dependency installation, database initialization,
+application startup, and health response were verified before extraction. The full inherited
+Odysseus suite was intentionally not run because the owner requested focused verification and
+the unrelated features are being removed from the active product. DueSoon-specific tests and
+runtime checks are the acceptance gate from this point forward.

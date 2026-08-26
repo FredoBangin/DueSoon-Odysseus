@@ -1,76 +1,73 @@
-<p align="center">
-  <img src="docs/odysseus-wordmark.png" alt="Odysseus" width="238">
-</p>
+# DueSoon
 
-<p align="center">
-  A self-hosted AI workspace for chat, agents, research, documents, email, notes, calendar, and local model workflows.
-</p>
+DueSoon is an evidence-backed academic intelligence system. This repository began as a curated fork of Odysseus, but the active service is now an isolated DueSoon FastAPI/SQLite foundation under `src/duesoon`.
 
-<p align="center">
-  <a href="#quick-start">Quick Start</a> ·
-  <a href="docs/setup.md">Setup Guide</a> ·
-  <a href="CONTRIBUTING.md">Contributing</a> ·
-  <a href="ROADMAP.md">Roadmap</a>
-</p>
+Read `DUESOON_CODEX_CONTEXT.md` before making material product or architecture changes. It is the foundational specification and learning base, not optional notes.
 
-<p align="center">
-  <a href="https://repology.org/project/odysseus-ai/versions"><img src="https://repology.org/badge/vertical-allrepos/odysseus-ai.svg" alt="Packaging status"></a>
-</p>
+## Current Stage
 
-<p align="center">
-  <img src="docs/odysseus-browser.jpg" alt="Odysseus interface">
-</p>
+Implemented foundation:
 
----
+- validated dry-run-first configuration;
+- minimal FastAPI liveness, readiness, and non-secret system endpoints;
+- isolated SQLAlchemy/SQLite connection layer with foreign keys;
+- one-worker SQLite invariant;
+- lean non-root container;
+- Compose topology containing only DueSoon and private ntfy;
+- Azure Linux VM and attached-managed-disk deployment decision; and
+- focused DueSoon tests.
 
-## Quick Start
+Canvas, Effective Assignment resolution, urgency, scheduler, and live notification publishing are intentionally deferred to test-first feature phases.
 
-> `dev` is the default branch and gets the newest changes first. Use [`main`](https://github.com/odysseus-dev/odysseus/tree/main) if you want the more curated branch.
+## Local Development
 
-```bash
-git clone https://github.com/odysseus-dev/odysseus.git
-cd odysseus
-cp .env.example .env
-docker compose up -d --build
+Python 3.12 or newer is required.
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+Copy-Item .env.example .env
+.\.venv\Scripts\python.exe -m uvicorn src.duesoon.api.app:app --host 127.0.0.1 --port 7000
 ```
 
-Open `http://localhost:7000` when the containers are healthy. The first admin password is printed in `docker compose logs odysseus`.
+Safe defaults keep dry-run enabled, the scheduler disabled, ntfy delivery disabled, and the API bound to loopback through Compose.
 
-Native installs, GPU notes, Windows/macOS instructions, HTTPS, and configuration live in the [setup guide](docs/setup.md).
+## Focused Verification
 
-## Features
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/duesoon -q
+.\.venv\Scripts\python.exe -m compileall -q src/duesoon
+docker compose config
+```
 
-- **Chat + Agents** — local/API models, tools, MCP, files, shell, skills, and memory.
-- **Cookbook** — hardware-aware model recommendations, downloads, and serving.
-- **Deep Research** — multi-step web research with source reading and report generation.
-- **Compare** — blind side-by-side model testing and synthesis.
-- **Documents** — writing-first editor with AI edits, suggestions, Markdown, HTML, CSV, and syntax highlighting.
-- **Email** — IMAP/SMTP inbox with triage, tags, summaries, reminders, and reply drafts.
-- **Notes, Tasks + Calendar** — reminders, todos, scheduled agent tasks, and CalDAV sync.
-- **Extras** — gallery/image editor, themes, uploads, web search, presets, sessions, and 2FA.
+The full inherited Odysseus suite is not the product gate. Legacy code is inert migration reference material; see `docs/migration/LEGACY_CONTRACTION_INVENTORY.md`.
 
-## Demo
+## Docker Compose
 
-A full hover-to-play tour lives on the landing page: [`docs/index.html`](docs/index.html).
+```powershell
+Copy-Item .env.example .env
+docker compose up --build
+```
 
-## Contributing
+Endpoints:
 
-Help is welcome. The best entry points are fresh-install testing, provider setup bugs, mobile/editor polish, docs, and small focused refactors. See [CONTRIBUTING.md](CONTRIBUTING.md) and [ROADMAP.md](ROADMAP.md).
+- `GET http://127.0.0.1:7000/health/live`
+- `GET http://127.0.0.1:7000/health/ready`
+- `GET http://127.0.0.1:7000/api/v1/system/info`
+
+ntfy starts with default access set to `deny-all`. Create a user/token and grant only that user access to the private DueSoon topic before enabling `DUESOON_NTFY_ENABLED`. Production also requires HTTPS and an iPhone subscription to the self-hosted server/topic.
+
+## Azure Storage
+
+Initial production target is one Azure Linux VM using Docker Compose. Mount an attached Azure managed disk on the host, set `DUESOON_DATA_DIR` to a directory on that disk, and keep exactly one scheduler. Do not store SQLite on Azure Files.
 
 ## Security
 
-Odysseus is a self-hosted workspace with powerful local tools. Keep auth enabled, keep private data out of Git, and do not expose raw model/service ports publicly. Deployment details are in the [setup guide](docs/setup.md#security-notes).
+- Never commit `.env`, tokens, Canvas content, professor messages, course documents, databases, or backups.
+- Keep `DUESOON_DRY_RUN=true` until decisions and rendered notifications are reviewed.
+- Keep ntfy private with HTTPS, bearer-token authentication, topic ACLs, and persistent auth/cache volumes.
+- Never expose inherited shell, agent, MCP, model-serving, or outbound email functionality.
 
-## Star History
+## Provenance and License
 
-<a href="https://www.star-history.com/?repos=odysseus-dev%2Fodysseus&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=odysseus-dev/odysseus&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=odysseus-dev/odysseus&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=odysseus-dev/odysseus&type=date&legend=top-left" />
- </picture>
-</a>
-
-## License
-
-AGPL-3.0-or-later -- see [LICENSE](LICENSE) and [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md).
+This work preserves the repository's existing license and attribution files. See `LICENSE` and `ACKNOWLEDGMENTS.md`. The upstream baseline and fork policy are recorded in `docs/migration/ODYSSEUS_BASELINE.md`.
