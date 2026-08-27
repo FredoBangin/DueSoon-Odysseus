@@ -20,6 +20,7 @@ services:
       - DUESOON_NTFY_URL=${DUESOON_NTFY_URL:-http://ntfy:80}
       - DUESOON_NTFY_TOPIC=${DUESOON_NTFY_TOPIC:-}
       - DUESOON_NTFY_TOKEN=${DUESOON_NTFY_TOKEN:-}
+      - DUESOON_NTFY_TIMEOUT_SECONDS=${DUESOON_NTFY_TIMEOUT_SECONDS:-10}
     volumes:
       - ${DUESOON_DATA_DIR:-duesoon-data}:/app/data
     healthcheck:

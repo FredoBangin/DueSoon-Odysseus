@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class CourseResponse(BaseModel):
@@ -50,3 +50,15 @@ class SyncResponse(BaseModel):
     assignments_seen: int
     submissions_seen: int
     source_versions_created: int
+
+
+class TestNotificationRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    message: str = Field(min_length=1, max_length=1000)
+    priority: int = Field(default=3, ge=1, le=5)
+
+
+class NotificationDeliveryResponse(BaseModel):
+    status: str
+    delivery_id: int
+    provider_message_id: str | None

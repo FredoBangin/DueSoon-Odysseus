@@ -157,3 +157,21 @@ class SyncRun(Base):
     submissions_seen: Mapped[int] = mapped_column(Integer, default=0)
     source_versions_created: Mapped[int] = mapped_column(Integer, default=0)
     error_code: Mapped[str | None] = mapped_column(String(100))
+
+
+class NotificationDelivery(Base):
+    __tablename__ = "notification_deliveries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    dedup_key: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    notification_kind: Mapped[str] = mapped_column(String(50))
+    status: Mapped[str] = mapped_column(String(30), index=True)
+    rendered_title: Mapped[str] = mapped_column(String(200))
+    rendered_body: Mapped[str] = mapped_column(String(1000))
+    priority: Mapped[int] = mapped_column(Integer)
+    provider: Mapped[str] = mapped_column(String(30))
+    provider_message_id: Mapped[str | None] = mapped_column(String(255), index=True)
+    error_code: Mapped[str | None] = mapped_column(String(100))
+    attempted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)

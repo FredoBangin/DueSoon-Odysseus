@@ -21,7 +21,12 @@ Implemented foundation:
 - idempotent source records and assignment snapshots; and
 - course, assignment, detail, and manual Canvas sync APIs.
 
-Effective Assignment resolution, urgency, scheduler, and live notification publishing remain next phases.
+Effective Assignment resolution, urgency, the scheduler, and automated assignment
+notification publishing remain next phases.
+
+The current controlled prototype includes a token-guarded, idempotent
+`POST /api/v1/notifications/test` endpoint. It audits dry-run and live ntfy
+outcomes but does not yet schedule assignment reminders.
 
 ## Local Development
 

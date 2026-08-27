@@ -1,0 +1,48 @@
+#cloud-config
+package_update: true
+packages:
+  - docker.io
+  - docker-compose-v2
+  - git
+
+write_files:
+  - path: /usr/local/sbin/duesoon-bootstrap
+    owner: root:root
+    permissions: "0750"
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+
+      disk=/dev/disk/azure/scsi1/lun0
+      mount_point=/mnt/duesoon
+
+      for _ in $(seq 1 60); do
+        [[ -b "$disk" ]] && break
+        sleep 2
+      done
+      [[ -b "$disk" ]] || { echo "Azure data disk LUN 0 not found" >&2; exit 1; }
+
+      if ! blkid "$disk" >/dev/null 2>&1; then
+        mkfs.ext4 -F -L duesoon-data "$disk"
+      fi
+
+      install -d -m 0755 "$mount_point"
+      disk_uuid=$(blkid -s UUID -o value "$disk")
+      if ! grep -q "UUID=$disk_uuid" /etc/fstab; then
+        echo "UUID=$disk_uuid $mount_point ext4 defaults,nofail 0 2" >> /etc/fstab
+      fi
+      mount "$mount_point" || mount -a
+
+      install -d -m 0750 \
+        "$mount_point/app" \
+        "$mount_point/ntfy-cache" \
+        "$mount_point/ntfy-data" \
+        "$mount_point/caddy-data" \
+        "$mount_point/caddy-config"
+      chown -R 10001:10001 "$mount_point/app"
+      chown -R 1000:1000 "$mount_point/ntfy-cache" "$mount_point/ntfy-data"
+      chown -R 1000:1000 "$mount_point/caddy-data" "$mount_point/caddy-config"
+
+runcmd:
+  - [systemctl, enable, --now, docker]
+  - [bash, -lc, /usr/local/sbin/duesoon-bootstrap]

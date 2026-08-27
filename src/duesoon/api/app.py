@@ -11,10 +11,19 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from src.duesoon import __version__
-from src.duesoon.api.schemas import AssignmentResponse, CourseResponse, SubmissionResponse, SyncResponse
+from src.duesoon.api.schemas import (
+    AssignmentResponse,
+    CourseResponse,
+    NotificationDeliveryResponse,
+    SubmissionResponse,
+    SyncResponse,
+    TestNotificationRequest,
+)
 from src.duesoon.canvas.client import CanvasAPIError, CanvasClient
 from src.duesoon.canvas.sync import CanvasSyncService
 from src.duesoon.config.settings import DueSoonSettings, get_settings
+from src.duesoon.notifications.ntfy import NtfyPublishError, NtfyPublisher
+from src.duesoon.notifications.service import NotificationService
 from src.duesoon.persistence.database import (
     create_engine_from_settings,
     create_schema,
@@ -29,6 +38,7 @@ def create_app(
     *,
     engine: Any | None = None,
     canvas_sync_service: Any | None = None,
+    notification_publisher: Any | None = None,
 ) -> FastAPI:
     """Create an isolated DueSoon application."""
 
@@ -40,6 +50,16 @@ def create_app(
     if runtime_canvas_sync is None and runtime_settings.canvas_enabled:
         owned_canvas_client = CanvasClient(runtime_settings)
         runtime_canvas_sync = CanvasSyncService(owned_canvas_client, runtime_sessions)
+    owned_notification_publisher: NtfyPublisher | None = None
+    runtime_notification_publisher = notification_publisher
+    if runtime_notification_publisher is None and runtime_settings.ntfy_enabled:
+        owned_notification_publisher = NtfyPublisher(runtime_settings)
+        runtime_notification_publisher = owned_notification_publisher
+    runtime_notifications = NotificationService(
+        runtime_settings,
+        runtime_sessions,
+        runtime_notification_publisher,
+    )
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
@@ -52,6 +72,8 @@ def create_app(
         finally:
             if owned_canvas_client is not None:
                 owned_canvas_client.close()
+            if owned_notification_publisher is not None:
+                owned_notification_publisher.close()
             runtime_engine.dispose()
 
     application = FastAPI(
@@ -63,6 +85,7 @@ def create_app(
     application.state.engine = runtime_engine
     application.state.sessions = runtime_sessions
     application.state.canvas_sync = runtime_canvas_sync
+    application.state.notifications = runtime_notifications
 
     @application.get("/health/live", tags=["health"])
     def liveness() -> dict[str, str]:
@@ -107,6 +130,34 @@ def create_app(
         except CanvasAPIError as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
         return SyncResponse(**summary.to_dict())
+
+    @application.post(
+        "/api/v1/notifications/test",
+        response_model=NotificationDeliveryResponse,
+        tags=["notifications"],
+    )
+    def send_test_notification(
+        request: TestNotificationRequest,
+        idempotency_key: str = Header(alias="Idempotency-Key", min_length=8, max_length=255),
+        _authorization: None = Depends(require_api_token),
+    ) -> NotificationDeliveryResponse:
+        if not runtime_settings.dry_run and not runtime_settings.ntfy_enabled:
+            raise HTTPException(status_code=409, detail="ntfy delivery is disabled")
+        try:
+            result = runtime_notifications.send_test(
+                idempotency_key=idempotency_key,
+                title=request.title,
+                message=request.message,
+                priority=request.priority,
+            )
+        except NtfyPublishError as exc:
+            status_code = 409 if str(exc) == "ntfy delivery is disabled" else 502
+            raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+        return NotificationDeliveryResponse(
+            status=result.status,
+            delivery_id=result.delivery_id,
+            provider_message_id=result.provider_message_id,
+        )
 
     @application.get(
         "/api/v1/courses",

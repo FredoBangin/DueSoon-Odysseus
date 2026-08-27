@@ -1,0 +1,21 @@
+{
+	email {$ACME_EMAIL}
+}
+
+{$DUESOON_PUBLIC_HOST} {
+	encode zstd gzip
+
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	header X-Content-Type-Options "nosniff"
+	header Referrer-Policy "no-referrer"
+	header -Server
+
+	@duesoon path /api/* /health/* /docs* /redoc* /openapi.json
+	handle @duesoon {
+		reverse_proxy duesoon:7000
+	}
+
+	handle {
+		reverse_proxy ntfy:80
+	}
+}

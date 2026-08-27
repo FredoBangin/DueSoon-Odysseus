@@ -34,6 +34,7 @@ class DueSoonSettings(BaseSettings):
     ntfy_url: str | None = None
     ntfy_topic: SecretStr | None = None
     ntfy_token: SecretStr | None = None
+    ntfy_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
 
     canvas_enabled: bool = False
     canvas_base_url: str | None = None

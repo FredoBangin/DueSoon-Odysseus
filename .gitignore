@@ -107,3 +107,8 @@ _scratch/
 # instructions local; source changes must not vendor an unreviewed skill bundle.
 .agents/
 skills-lock.json
+
+# Project-local deployment CLIs and credentials
+.tools/
+.pytest-tmp/
+.pytest_cache/

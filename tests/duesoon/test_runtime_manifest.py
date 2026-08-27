@@ -87,3 +87,35 @@ def test_default_pytest_scope_is_due_soon_only() -> None:
     assert 'testpaths = ["tests/duesoon"]' in pyproject
     assert "core.database" not in conftest
     assert "src.database" not in conftest
+
+
+def test_azure_compose_exposes_only_caddy_and_persists_managed_disk_state() -> None:
+    compose = read("deploy/azure/docker-compose.production.yml")
+
+    assert compose.count("ports:") == 1
+    assert '"80:80"' in compose
+    assert '"443:443"' in compose
+    assert "DUESOON_SCHEDULER_WORKERS=1" in compose
+    assert "/mnt/duesoon/app:/app/data" in compose
+    assert "/mnt/duesoon/ntfy-cache:/var/cache/ntfy" in compose
+    assert "/mnt/duesoon/ntfy-data:/var/lib/ntfy" in compose
+    assert "NTFY_AUTH_DEFAULT_ACCESS=deny-all" in compose
+    assert "NTFY_UPSTREAM_BASE_URL=https://ntfy.sh" in compose
+
+
+def test_azure_caddy_routes_due_soon_api_and_ntfy_over_one_https_host() -> None:
+    caddyfile = read("deploy/azure/Caddyfile")
+
+    assert "{$DUESOON_PUBLIC_HOST}" in caddyfile
+    assert "reverse_proxy duesoon:7000" in caddyfile
+    assert "reverse_proxy ntfy:80" in caddyfile
+    assert "header Strict-Transport-Security" in caddyfile
+
+
+def test_cloud_init_mounts_lun_zero_before_starting_compose() -> None:
+    cloud_init = read("deploy/azure/cloud-init.yml")
+
+    assert "/dev/disk/azure/scsi1/lun0" in cloud_init
+    assert "/mnt/duesoon" in cloud_init
+    assert "docker.io" in cloud_init
+    assert "docker-compose-v2" in cloud_init
