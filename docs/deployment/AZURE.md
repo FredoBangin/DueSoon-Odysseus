@@ -86,4 +86,7 @@ docker compose --env-file /etc/duesoon/compose.env -f docker-compose.production.
 5. Set `DUESOON_DRY_RUN=false`, recreate only the DueSoon container, and call `POST /api/v1/notifications/test` once with `X-API-Token` and a unique `Idempotency-Key`.
 6. The response is `sent`, includes a provider message ID, and repeating the key returns `already_sent` without another phone alert.
 
+Run `sudo bash /opt/duesoon/deploy/azure/verify-runtime.sh` on the VM for a
+non-secret check of authenticated API access and anonymous ntfy denial.
+
 Do not enable the scheduler until the checkpoint engine and pre-send Canvas submission recheck are implemented and verified.
