@@ -88,5 +88,8 @@ docker compose --env-file /etc/duesoon/compose.env -f docker-compose.production.
 
 Run `sudo bash /opt/duesoon/deploy/azure/verify-runtime.sh` on the VM for a
 non-secret check of authenticated API access and anonymous ntfy denial.
+After the iPhone subscription is configured, run
+`sudo /opt/duesoon/deploy/azure/send-controlled-notification.sh` once for an
+audited, idempotent live alert.
 
 Do not enable the scheduler until the checkpoint engine and pre-send Canvas submission recheck are implemented and verified.
