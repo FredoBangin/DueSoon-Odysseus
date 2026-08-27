@@ -1,6 +1,8 @@
 # Legacy Contraction Inventory
 
 **Status:** Runtime isolated; physical contraction in staged follow-up batches.
+
+Canvas core no longer depends on legacy Odysseus code. Courses, assignments, current-user submissions, raw source records, normalized snapshots, pagination, retries, and read-only APIs now live under `src/duesoon`. Legacy Canvas-like helpers, if any, are no longer candidates for active reuse.
 **Active runtime:** `src/duesoon` only.
 
 ## Active DueSoon Foundation

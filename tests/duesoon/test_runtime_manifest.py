@@ -19,6 +19,7 @@ def test_runtime_requirements_are_foundation_only() -> None:
 
     assert requirements == {
         "fastapi==0.141.1",
+        "httpx==0.28.1",
         "pydantic-settings==2.15.0",
         "SQLAlchemy==2.0.52",
         "uvicorn==0.52.4",
@@ -68,6 +69,9 @@ def test_compose_contains_only_due_soon_and_ntfy_services() -> None:
     assert "  ntfy:" in compose
     assert "  odysseus:" not in compose
     assert "DUESOON_DATABASE_URL" in compose
+    assert "DUESOON_CANVAS_ENABLED" in compose
+    assert "DUESOON_CANVAS_BASE_URL" in compose
+    assert "DUESOON_CANVAS_ACCESS_TOKEN" in compose
     assert "NTFY_AUTH_DEFAULT_ACCESS=deny-all" in compose
 
 

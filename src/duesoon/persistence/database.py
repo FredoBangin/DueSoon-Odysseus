@@ -7,6 +7,7 @@ from typing import Any
 
 from sqlalchemy import Engine, create_engine, event, text
 from sqlalchemy.engine import make_url
+from sqlalchemy.orm import Session, sessionmaker
 
 from src.duesoon.config.settings import DueSoonSettings
 
@@ -51,3 +52,17 @@ def database_is_ready(engine: Any) -> bool:
         return True
     except Exception:
         return False
+
+
+def create_schema(engine: Engine) -> None:
+    """Create prototype tables explicitly during application startup."""
+
+    from src.duesoon.persistence.models import Base
+
+    Base.metadata.create_all(engine)
+
+
+def session_factory(engine: Engine) -> sessionmaker[Session]:
+    """Create short-lived SQLAlchemy sessions bound to one engine."""
+
+    return sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)

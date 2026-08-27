@@ -17,6 +17,11 @@ DUESOON_ENV_VARS = (
     "DUESOON_NTFY_URL",
     "DUESOON_NTFY_TOPIC",
     "DUESOON_NTFY_TOKEN",
+    "DUESOON_CANVAS_ENABLED",
+    "DUESOON_CANVAS_BASE_URL",
+    "DUESOON_CANVAS_ACCESS_TOKEN",
+    "DUESOON_CANVAS_TIMEOUT_SECONDS",
+    "DUESOON_CANVAS_MAX_ATTEMPTS",
 )
 
 
@@ -35,6 +40,9 @@ def test_safe_defaults_are_dry_run_and_single_worker() -> None:
     assert settings.scheduler_enabled is False
     assert settings.scheduler_workers == 1
     assert settings.ntfy_enabled is False
+    assert settings.canvas_enabled is False
+    assert settings.canvas_timeout_seconds == 15.0
+    assert settings.canvas_max_attempts == 3
 
 
 def test_environment_values_are_parsed(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -89,8 +97,38 @@ def test_secret_values_are_redacted_from_repr() -> None:
         _env_file=None,
         api_token="api-secret",
         ntfy_token="ntfy-secret",
+        canvas_access_token="canvas-secret",
     )
 
     rendered = repr(settings)
     assert "api-secret" not in rendered
     assert "ntfy-secret" not in rendered
+    assert "canvas-secret" not in rendered
+
+
+def test_enabled_canvas_requires_url_and_token() -> None:
+    with pytest.raises(ValidationError, match="DUESOON_CANVAS_BASE_URL"):
+        DueSoonSettings(_env_file=None, canvas_enabled=True)
+
+
+def test_canvas_base_url_is_normalized() -> None:
+    settings = DueSoonSettings(
+        _env_file=None,
+        canvas_enabled=True,
+        canvas_base_url="https://school.instructure.com/",
+        canvas_access_token="canvas-secret",
+    )
+
+    assert settings.canvas_base_url == "https://school.instructure.com"
+
+
+def test_production_canvas_requires_https() -> None:
+    with pytest.raises(ValidationError, match="Canvas requires HTTPS"):
+        DueSoonSettings(
+            _env_file=None,
+            environment="production",
+            api_token="api-secret",
+            canvas_enabled=True,
+            canvas_base_url="http://canvas.example.test",
+            canvas_access_token="canvas-secret",
+        )

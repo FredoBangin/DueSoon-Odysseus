@@ -35,6 +35,12 @@ class DueSoonSettings(BaseSettings):
     ntfy_topic: SecretStr | None = None
     ntfy_token: SecretStr | None = None
 
+    canvas_enabled: bool = False
+    canvas_base_url: str | None = None
+    canvas_access_token: SecretStr | None = None
+    canvas_timeout_seconds: float = Field(default=15.0, gt=0, le=120)
+    canvas_max_attempts: int = Field(default=3, ge=1, le=5)
+
     @model_validator(mode="after")
     def validate_runtime_invariants(self) -> "DueSoonSettings":
         if (
@@ -59,6 +65,22 @@ class DueSoonSettings(BaseSettings):
                 raise ValueError(f"ntfy delivery requires {', '.join(missing)}")
             if self.environment == "production" and not self.ntfy_url.startswith("https://"):
                 raise ValueError("production ntfy delivery requires HTTPS")
+
+        if self.canvas_base_url:
+            self.canvas_base_url = self.canvas_base_url.rstrip("/")
+
+        if self.canvas_enabled:
+            missing = []
+            if not self.canvas_base_url:
+                missing.append("DUESOON_CANVAS_BASE_URL")
+            if self.canvas_access_token is None:
+                missing.append("DUESOON_CANVAS_ACCESS_TOKEN")
+            if missing:
+                raise ValueError(f"Canvas ingestion requires {', '.join(missing)}")
+            if self.environment == "production" and not self.canvas_base_url.startswith(
+                "https://"
+            ):
+                raise ValueError("production Canvas requires HTTPS")
 
         return self
 

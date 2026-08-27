@@ -16,8 +16,12 @@ Implemented foundation:
 - Compose topology containing only DueSoon and private ntfy;
 - Azure Linux VM and attached-managed-disk deployment decision; and
 - focused DueSoon tests.
+- read-only Canvas courses, assignments, and current-user submissions;
+- opaque Canvas pagination with retry and cross-origin protection;
+- idempotent source records and assignment snapshots; and
+- course, assignment, detail, and manual Canvas sync APIs.
 
-Canvas, Effective Assignment resolution, urgency, scheduler, and live notification publishing are intentionally deferred to test-first feature phases.
+Effective Assignment resolution, urgency, scheduler, and live notification publishing remain next phases.
 
 ## Local Development
 
@@ -54,6 +58,33 @@ Endpoints:
 - `GET http://127.0.0.1:7000/health/live`
 - `GET http://127.0.0.1:7000/health/ready`
 - `GET http://127.0.0.1:7000/api/v1/system/info`
+- `POST http://127.0.0.1:7000/api/v1/canvas/sync`
+- `GET http://127.0.0.1:7000/api/v1/courses`
+- `GET http://127.0.0.1:7000/api/v1/assignments`
+- `GET http://127.0.0.1:7000/api/v1/assignments/{id}`
+
+## Canvas Prototype
+
+Add these values to `.env`:
+
+```env
+DUESOON_CANVAS_ENABLED=true
+DUESOON_CANVAS_BASE_URL=https://school.instructure.com
+DUESOON_CANVAS_ACCESS_TOKEN=replace-with-read-only-student-token
+DUESOON_API_TOKEN=replace-with-long-random-api-token
+```
+
+Trigger a read-only sync:
+
+```powershell
+Invoke-RestMethod `
+  -Method Post `
+  -Uri http://127.0.0.1:7000/api/v1/canvas/sync `
+  -Headers @{ "X-API-Token" = $env:DUESOON_API_TOKEN }
+```
+
+Canvas data is stored idempotently in SQLite. Raw API payloads remain internal; public assignment responses expose normalized academic fields only.
+When `DUESOON_API_TOKEN` is configured, sync and all academic-data endpoints require the `X-API-Token` header.
 
 ntfy starts with default access set to `deny-all`. Create a user/token and grant only that user access to the private DueSoon topic before enabling `DUESOON_NTFY_ENABLED`. Production also requires HTTPS and an iPhone subscription to the self-hosted server/topic.
 
