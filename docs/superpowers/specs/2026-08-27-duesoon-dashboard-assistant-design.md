@@ -320,3 +320,8 @@ The dashboard MVP is complete only when:
 9. Unit, integration, frontend smoke, security, and Azure runtime checks pass.
 10. The branch is committed and pushed, Azure is healthy, deferred phases remain documented, and rollback information is available.
 
+## 17. Agent Communication Architecture
+
+DueSoon agents use the installed `caveman` skill for user-facing conversation by default. This reduces credit use by compressing progress updates, explanations, and handoffs without reducing technical substance. The mode remains active until the owner explicitly requests `stop caveman` or `normal mode`.
+
+This communication rule does not change application behavior or engineering standards. Code, tests, comments, commits, specifications, handoffs, security warnings, and destructive-action confirmations remain clear normal prose. Agents must never trade implementation, testing, verification, or safety for shorter communication.

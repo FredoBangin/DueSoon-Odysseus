@@ -16,6 +16,7 @@ It is the foundational product specification and learning base, not optional not
 - Update the foundational context or an architecture decision record when changing a product invariant.
 - Production targets one Azure Linux VM, an attached managed disk for SQLite, Docker Compose, and exactly one scheduler.
 - Keep legacy Odysseus code inert until each retained academic primitive has a tested DueSoon replacement.
+- Use the installed `caveman` skill for all user-facing agent conversation by default to conserve credits. Keep technical accuracy, security warnings, code, commits, tests, architecture documents, and other durable project artifacts in clear normal prose. Caveman mode remains active until the owner explicitly says `stop caveman` or `normal mode`.
 
 ## Current Repository Baseline
 

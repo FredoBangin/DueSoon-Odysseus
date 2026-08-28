@@ -1901,3 +1901,15 @@ The current implementation priority is a secure, single-owner web interface buil
 After the MVP is stable, required phases add an OpenAI-compatible model router with configurable primary and fallback models, auditable correction learning, read-only Gmail evidence, read-only Google Calendar overlays, and DueSoon-specific versions of Notes, Memory, and Documents. PWA or native app work comes only after the web interface is reliable.
 
 Every learned change must be visible, attributable, reviewable, and reversible. Learned behavior may improve explanation, matching, and suggestions, but it must not silently alter canonical deadlines, submission status, or reminder timing. Before final production approval, Codex Security must review all security-relevant changes and findings must be fixed or explicitly accepted by the owner.
+
+---
+
+## 32. Agent Communication and Credit Efficiency
+
+DueSoon development agents must use the installed `caveman` skill for user-facing conversation by default. This is a permanent workflow rule intended to conserve model credits while preserving full technical accuracy.
+
+The rule applies to progress updates, status reports, explanations, and final handoffs. Agents should remove filler, avoid repeating information, and state the result, evidence, blocker, and next action as briefly as clarity permits. Caveman mode remains active until the owner explicitly requests `stop caveman` or `normal mode`.
+
+Compression must never weaken safety or project quality. Security warnings, destructive-action confirmations, ambiguous multi-step instructions, and other high-risk communication must use enough normal prose to remain unambiguous. Source code, code comments, tests, commit messages, architecture documents, specifications, handoffs, issue reports, and third-party messages must remain clear professional prose rather than caveman phrasing.
+
+Credit efficiency must not reduce implementation scope, testing depth, evidence quality, or verification. Use fewer conversational tokens; do not skip necessary engineering work.
