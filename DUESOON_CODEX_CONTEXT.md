@@ -1889,3 +1889,15 @@ Codex should continually ask:
 > Does this change improve DueSoon's ability to understand the student's real academic obligations and help them complete work on time, while remaining explainable, safe, and reliable?
 
 If an implementation decision conflicts with that objective, the product objective wins. If a cleaner implementation achieves the same objective without weakening the invariants in this document, improve the implementation and document the decision.
+
+---
+
+## 31. Active Dashboard and Assistant Program
+
+The approved dashboard architecture is defined in `docs/superpowers/specs/2026-08-27-duesoon-dashboard-assistant-design.md`. That specification is an active extension of this foundational document.
+
+The current implementation priority is a secure, single-owner web interface built directly into the DueSoon FastAPI service. It shall extract useful Odysseus interface patterns without restarting the full inherited backend. The guaranteed MVP includes owner login, an Odysseus-derived shell, a real Canvas briefing, a Canvas-style calendar, a deterministic dashboard assistant, notification history, a Review Center foundation, and a Settings foundation.
+
+After the MVP is stable, required phases add an OpenAI-compatible model router with configurable primary and fallback models, auditable correction learning, read-only Gmail evidence, read-only Google Calendar overlays, and DueSoon-specific versions of Notes, Memory, and Documents. PWA or native app work comes only after the web interface is reliable.
+
+Every learned change must be visible, attributable, reviewable, and reversible. Learned behavior may improve explanation, matching, and suggestions, but it must not silently alter canonical deadlines, submission status, or reminder timing. Before final production approval, Codex Security must review all security-relevant changes and findings must be fixed or explicitly accepted by the owner.
