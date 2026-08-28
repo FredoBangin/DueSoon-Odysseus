@@ -92,4 +92,15 @@ After the iPhone subscription is configured, run
 `sudo /opt/duesoon/deploy/azure/send-controlled-notification.sh` once for an
 audited, idempotent live alert.
 
-Do not enable the scheduler until the checkpoint engine and pre-send Canvas submission recheck are implemented and verified.
+Optional model and Google Workspace credentials can be entered without terminal
+echo or source-control exposure:
+
+```bash
+sudo bash /opt/duesoon/deploy/azure/configure-integrations.sh model
+sudo bash /opt/duesoon/deploy/azure/configure-integrations.sh google
+```
+
+Restart only the DueSoon service afterward. These secrets remain root-readable
+in `/etc/duesoon/duesoon.env`; dashboard APIs and browser storage never receive
+them. The scheduler may be enabled after checkpoint crossing, deduplication, and
+the immediate pre-send Canvas submission recheck pass deployment verification.
