@@ -62,7 +62,11 @@ class BriefingService:
         missing = [v for v in incomplete if v["submission_status"] == "missing"]
         completed = [v for v in views if v["submission_status"] in {"submitted", "graded"}]
         with self.sessions() as session:
-            latest_sync = session.scalar(select(SyncRun).where(SyncRun.status == "success").order_by(SyncRun.finished_at.desc()))
+            latest_sync = session.scalar(
+                select(SyncRun)
+                .where(SyncRun.status.in_(("completed", "success")))
+                .order_by(SyncRun.finished_at.desc())
+            )
             reminder_counts = dict(Counter(session.scalars(select(ReminderEvent.status)).all()))
         synced_at = _utc(latest_sync.finished_at).isoformat() if latest_sync and latest_sync.finished_at else None
         stale = not synced_at or now - datetime.fromisoformat(synced_at) > timedelta(seconds=self.settings.scheduler_interval_seconds * 2)

@@ -9,7 +9,7 @@ from src.duesoon.api.app import create_app
 from src.duesoon.auth.passwords import hash_password, verify_password
 from src.duesoon.config.settings import DueSoonSettings
 from src.duesoon.persistence.database import create_engine_from_settings, session_factory
-from src.duesoon.persistence.models import Assignment, Course, Submission
+from src.duesoon.persistence.models import Assignment, Course, Submission, SyncRun
 
 
 def build(tmp_path: Path):
@@ -60,12 +60,16 @@ def test_dashboard_uses_real_canvas_records_and_is_browser_guarded(tmp_path: Pat
                                     published=True, first_seen_at=now, last_seen_at=now)
             session.add_all([course, assignment, Submission(assignment=assignment,
                 normalized_status="not_submitted", missing=False, late=False,
-                observed_at=now, raw_payload={"secret": "not-returned"})])
+                observed_at=now, raw_payload={"secret": "not-returned"}),
+                SyncRun(source_system="canvas", status="completed", started_at=now,
+                        finished_at=now, courses_seen=1, assignments_seen=1,
+                        submissions_seen=1, source_versions_created=1)])
             session.commit()
         assert client.get("/api/v1/dashboard/briefing").status_code == 401
         csrf = login(client)
         briefing = client.get("/api/v1/dashboard/briefing")
         assert briefing.status_code == 200
+        assert briefing.json()["freshness"]["canvas_status"] == "fresh"
         assert briefing.json()["upcoming"][0]["effective_due_at"]
         assert "not-returned" not in briefing.text
         calendar = client.get(f"/api/v1/dashboard/calendar?start={now.date()}&end={(now + timedelta(days=2)).date()}")
