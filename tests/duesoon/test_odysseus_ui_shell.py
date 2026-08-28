@@ -10,7 +10,7 @@ def read(path: str) -> str:
 
 def test_shell_keeps_odysseus_structure_palette_and_all_due_soon_tabs() -> None:
     html = read("index.html")
-    css = read("css/app.css")
+    css = (ROOT.parents[3] / "static/style.css").read_text(encoding="utf-8")
 
     assert 'class="sidebar"' in html
     assert 'class="sidebar-header"' in html
@@ -36,6 +36,21 @@ def test_shell_keeps_odysseus_structure_palette_and_all_due_soon_tabs() -> None:
     assert "--border: #355a66" in css
     assert "--red: #e06c75" in css
     assert "'Fira Code'" in css
+
+
+def test_due_soon_bridge_css_does_not_replace_the_odysseus_shell() -> None:
+    css = read("css/app.css")
+
+    for forbidden in (
+        "\nbody {",
+        "\n.sidebar {",
+        "\n.sidebar-header {",
+        "\n.sidebar-inner {",
+        "\n.hamburger-btn {",
+        "\n.icon-rail {",
+    ):
+        assert forbidden not in f"\n{css}"
+    assert ".duesoon-workspace" in css
 
 
 def test_calendar_retains_odysseus_controls_and_read_only_detail_behavior() -> None:
