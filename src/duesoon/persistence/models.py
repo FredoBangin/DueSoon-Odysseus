@@ -175,3 +175,46 @@ class NotificationDelivery(Base):
     attempted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class ReminderEvent(Base):
+    __tablename__ = "reminder_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "assignment_id",
+            "deadline_at",
+            "checkpoint_minutes",
+            name="uq_reminder_assignment_deadline_checkpoint",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    assignment_id: Mapped[int] = mapped_column(
+        ForeignKey("assignments.id"), index=True
+    )
+    deadline_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    checkpoint_minutes: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(40), index=True)
+    reason: Mapped[str] = mapped_column(Text)
+    submission_recheck_status: Mapped[str | None] = mapped_column(String(30))
+    submission_rechecked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    delivery_id: Mapped[int | None] = mapped_column(
+        ForeignKey("notification_deliveries.id"), index=True
+    )
+    evaluated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class SchedulerState(Base):
+    __tablename__ = "scheduler_state"
+
+    key: Mapped[str] = mapped_column(String(100), primary_key=True)
+    last_successful_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )

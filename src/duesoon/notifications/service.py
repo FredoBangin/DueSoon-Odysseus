@@ -41,6 +41,42 @@ class NotificationService:
         message: str,
         priority: int,
     ) -> DeliveryResult:
+        return self._send(
+            idempotency_key=idempotency_key,
+            notification_kind="controlled_test",
+            title=title,
+            message=message,
+            priority=priority,
+            tags=["white_check_mark"],
+        )
+
+    def send_reminder(
+        self,
+        *,
+        idempotency_key: str,
+        title: str,
+        message: str,
+        priority: int,
+    ) -> DeliveryResult:
+        return self._send(
+            idempotency_key=idempotency_key,
+            notification_kind="deadline_checkpoint",
+            title=title,
+            message=message,
+            priority=priority,
+            tags=["alarm_clock"],
+        )
+
+    def _send(
+        self,
+        *,
+        idempotency_key: str,
+        notification_kind: str,
+        title: str,
+        message: str,
+        priority: int,
+        tags: list[str],
+    ) -> DeliveryResult:
         with self._sessions() as session:
             existing = session.scalar(
                 select(NotificationDelivery).where(
@@ -52,7 +88,7 @@ class NotificationService:
 
             delivery = NotificationDelivery(
                 dedup_key=idempotency_key,
-                notification_kind="controlled_test",
+                notification_kind=notification_kind,
                 status="pending",
                 rendered_title=title,
                 rendered_body=message,
@@ -92,7 +128,7 @@ class NotificationService:
                     title=title,
                     message=message,
                     priority=priority,
-                    tags=["white_check_mark"],
+                    tags=tags,
                 )
             except NtfyPublishError as exc:
                 delivery.status = "unknown" if exc.ambiguous else "failed"
