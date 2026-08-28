@@ -31,6 +31,16 @@ class DueSoonSettings(BaseSettings):
     scheduler_interval_seconds: int = Field(default=300, ge=30, le=3600)
     api_token: SecretStr | None = None
 
+    web_enabled: bool = False
+    public_origin: str | None = None
+    owner_username: str = "duesoon-owner"
+    owner_password_hash: SecretStr | None = None
+    timezone: str = "America/New_York"
+    session_cookie_name: str = "duesoon_session"
+    session_ttl_minutes: int = Field(default=480, ge=15, le=10080)
+    login_max_attempts: int = Field(default=5, ge=3, le=20)
+    login_window_seconds: int = Field(default=900, ge=60, le=3600)
+
     ntfy_enabled: bool = False
     ntfy_url: str | None = None
     ntfy_topic: SecretStr | None = None
@@ -60,6 +70,19 @@ class DueSoonSettings(BaseSettings):
 
         if self.environment == "production" and self.api_token is None:
             raise ValueError("DUESOON_API_TOKEN is required in production")
+
+        if not self.timezone or any(character.isspace() for character in self.timezone):
+            raise ValueError("DUESOON_TIMEZONE must be a non-empty IANA timezone name")
+
+        if self.public_origin:
+            self.public_origin = self.public_origin.rstrip("/")
+        if self.environment == "production" and self.web_enabled:
+            if self.owner_password_hash is None or not self.public_origin:
+                raise ValueError(
+                    "web login requires DUESOON_OWNER_PASSWORD_HASH and DUESOON_PUBLIC_ORIGIN"
+                )
+            if not self.public_origin.startswith("https://"):
+                raise ValueError("production web login requires an HTTPS public origin")
 
         if self.ntfy_enabled:
             missing = []

@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-import secrets
 from typing import Any, AsyncIterator
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from src.duesoon import __version__
+from src.duesoon.api.dependencies import require_api_token
+from src.duesoon.api.routes.auth import STATIC as WEB_STATIC, router as auth_router
+from src.duesoon.api.routes.dashboard import router as dashboard_router
 from src.duesoon.api.schemas import (
     AssignmentResponse,
     CourseResponse,
@@ -22,6 +25,9 @@ from src.duesoon.api.schemas import (
 from src.duesoon.canvas.client import CanvasAPIError, CanvasClient
 from src.duesoon.canvas.sync import CanvasSyncService
 from src.duesoon.config.settings import DueSoonSettings, get_settings
+from src.duesoon.auth.service import AuthService
+from src.duesoon.dashboard.assistant import DeterministicAssistant
+from src.duesoon.dashboard.briefing import BriefingService
 from src.duesoon.notifications.ntfy import NtfyPublishError, NtfyPublisher
 from src.duesoon.notifications.service import NotificationService
 from src.duesoon.persistence.database import (
@@ -63,6 +69,9 @@ def create_app(
         runtime_sessions,
         runtime_notification_publisher,
     )
+    runtime_auth = AuthService(runtime_settings, runtime_sessions)
+    runtime_briefing = BriefingService(runtime_settings, runtime_sessions)
+    runtime_assistant = DeterministicAssistant()
     runtime_scheduler = reminder_scheduler
     if (
         runtime_scheduler is None
@@ -109,6 +118,21 @@ def create_app(
     application.state.canvas_sync = runtime_canvas_sync
     application.state.notifications = runtime_notifications
     application.state.reminder_scheduler = runtime_scheduler
+    application.state.auth = runtime_auth
+    application.state.briefing = runtime_briefing
+    application.state.assistant = runtime_assistant
+    application.mount("/assets", StaticFiles(directory=WEB_STATIC), name="assets")
+    application.include_router(auth_router)
+    application.include_router(dashboard_router)
+
+    @application.middleware("http")
+    async def browser_security_headers(request: Request, call_next):
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        if request.url.path.startswith(("/app", "/api/v1/dashboard", "/api/v1/auth")):
+            response.headers.setdefault("Cache-Control", "no-store")
+        return response
 
     @application.get("/health/live", tags=["health"])
     def liveness() -> dict[str, str]:
@@ -130,15 +154,6 @@ def create_app(
             "scheduler_enabled": runtime_settings.scheduler_enabled,
             "notification_provider": "ntfy" if runtime_settings.ntfy_enabled else "disabled",
         }
-
-    def require_api_token(x_api_token: str | None = Header(default=None)) -> None:
-        configured = runtime_settings.api_token
-        if configured is None:
-            return
-        if x_api_token is None or not secrets.compare_digest(
-            x_api_token, configured.get_secret_value()
-        ):
-            raise HTTPException(status_code=401, detail="invalid API token")
 
     @application.post(
         "/api/v1/canvas/sync",

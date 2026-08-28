@@ -1,0 +1,1 @@
+"""Effective academic assignment projections."""

@@ -29,6 +29,9 @@ install -d -m 0700 "$config_root"
 api_token=$(openssl rand -hex 32)
 topic="duesoon-$(openssl rand -hex 12)"
 owner_password=$(openssl rand -base64 30 | tr -d '\n=/+')
+web_password=$(openssl rand -base64 30 | tr -d '\n=/+')
+cd "$app_root"
+web_password_hash=$(printf '%s' "$web_password" | python3 -m src.duesoon.auth.passwords hash-stdin)
 
 cat >"$compose_env" <<EOF
 DUESOON_PUBLIC_HOST=$public_host
@@ -47,6 +50,11 @@ DUESOON_NTFY_ENABLED=false
 DUESOON_NTFY_TOPIC=$topic
 DUESOON_NTFY_TOKEN=
 DUESOON_NTFY_TIMEOUT_SECONDS=10
+DUESOON_WEB_ENABLED=true
+DUESOON_PUBLIC_ORIGIN=https://$public_host
+DUESOON_OWNER_USERNAME=duesoon-owner
+DUESOON_OWNER_PASSWORD_HASH=$web_password_hash
+DUESOON_TIMEZONE=America/New_York
 EOF
 
 compose=(docker compose --env-file "$compose_env" -f "$compose_file")
@@ -79,6 +87,11 @@ DUESOON_NTFY_ENABLED=true
 DUESOON_NTFY_TOPIC=$topic
 DUESOON_NTFY_TOKEN=$ntfy_token
 DUESOON_NTFY_TIMEOUT_SECONDS=10
+DUESOON_WEB_ENABLED=true
+DUESOON_PUBLIC_ORIGIN=https://$public_host
+DUESOON_OWNER_USERNAME=duesoon-owner
+DUESOON_OWNER_PASSWORD_HASH=$web_password_hash
+DUESOON_TIMEZONE=America/New_York
 EOF
 
 cat >"$credentials" <<EOF
@@ -88,6 +101,8 @@ NTFY_USERNAME=duesoon-owner
 NTFY_PASSWORD=$owner_password
 NTFY_TOPIC=$topic
 NTFY_TOKEN=$ntfy_token
+WEB_USERNAME=duesoon-owner
+WEB_PASSWORD=$web_password
 EOF
 chmod 0600 "$compose_env" "$runtime_env" "$credentials"
 
