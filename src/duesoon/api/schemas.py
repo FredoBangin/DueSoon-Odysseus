@@ -26,6 +26,21 @@ class SubmissionResponse(BaseModel):
     late: bool
 
 
+class UrgencyBreakdownResponse(BaseModel):
+    time_score: int
+    value_score: int
+    workload_score: int
+    deadline_risk_score: int
+    due_date_change_score: int
+    submission_score: int
+    overdue_score: int
+    raw_score: int
+    total: int
+    level: str
+    reasons: list[str]
+    config_version: str
+
+
 class AssignmentResponse(BaseModel):
     id: int
     canvas_assignment_id: str
@@ -43,6 +58,60 @@ class AssignmentResponse(BaseModel):
     html_url: str | None
     published: bool
     submission: SubmissionResponse | None
+    effective_due_at: datetime | None
+    operational_due_at: datetime | None
+    deadline_status: str
+    deadline_confidence: str
+    deadline_source_summary: str
+    deadline_evidence_ids: list[str]
+    due_at_precision: str
+    deadline_resolution_explanation: str
+    conflicting_due_at: list[datetime]
+    urgency: UrgencyBreakdownResponse
+
+
+class EvidenceItemResponse(BaseModel):
+    evidence_id: str
+    source_system: str
+    source_type: str
+    claim_type: str
+    claimed_due_at: datetime | None
+    source_published_at: datetime | None
+    precision: str
+    validation_status: str
+    disposition: str
+    authority_score: float
+    course_match_score: float
+    assignment_match_score: float
+    explicitness_score: float
+    extraction_reliability: float
+    owner_confirmed: bool
+    source_current: bool
+    supports_current_resolution: bool
+    summary: str
+
+
+class EvidenceInspectionResponse(BaseModel):
+    assignment_id: int
+    effective_due_at: datetime | None
+    operational_due_at: datetime | None
+    deadline_status: str
+    deadline_confidence: str
+    deadline_evidence_ids: list[str]
+    due_at_precision: str
+    resolution_explanation: str
+    conflicting_due_at: list[datetime]
+    items: list[EvidenceItemResponse]
+
+
+class ConfirmDeadlineRequest(BaseModel):
+    due_at: datetime
+
+
+class ConfirmDeadlineResponse(BaseModel):
+    created: bool
+    evidence_id: str
+    inspection: EvidenceInspectionResponse
 
 
 class SyncResponse(BaseModel):

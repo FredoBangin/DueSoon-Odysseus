@@ -10,10 +10,16 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 
+from src.duesoon.assignments.effective import (
+    EffectiveAssignment,
+    project_canvas_assignment,
+)
 from src.duesoon.canvas.sync import CanvasSyncService
 from src.duesoon.notifications.service import NotificationService
 from src.duesoon.persistence.models import (
     Assignment,
+    AssignmentEvidence,
+    Claim,
     ReminderEvent,
     SchedulerState,
 )
@@ -22,6 +28,7 @@ from src.duesoon.reminders.checkpoints import crossed_checkpoint
 
 COMPLETED_STATUSES = {"submitted", "graded"}
 SCHEDULER_STATE_KEY = "canvas_reminders"
+RECONCILABLE_EVENT_STATUSES = {"pending", "claimed", "retry_scheduled"}
 
 
 @dataclass(frozen=True)
@@ -39,24 +46,40 @@ class ReminderService:
         notifications: NotificationService,
         *,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        assignment_projector: Callable[[Assignment], EffectiveAssignment] = (
+            project_canvas_assignment
+        ),
     ) -> None:
         self._sessions = sessions
         self._canvas_sync = canvas_sync
         self._notifications = notifications
         self._clock = clock
+        self._assignment_projector = assignment_projector
 
     def run_once(self) -> ReminderRunSummary:
         self._canvas_sync.sync()
         now = _as_utc(self._clock())
         previous = self._last_successful_evaluation()
-        candidates = self._candidate_assignments()
+        assignments = self._assignments()
         sent = suppressed = dry_run = 0
 
-        for assignment in candidates:
-            deadline = assignment.canvas_due_at
-            if deadline is None:
+        for assignment, effective in assignments:
+            deadline = effective.operational_due_at
+            self._reconcile_deadline_version(assignment.id, deadline)
+            if (
+                deadline is None
+                or not assignment.published
+                or effective.submission_status in COMPLETED_STATUSES
+                or effective.deadline_confidence == "low"
+            ):
                 continue
-            checkpoint = crossed_checkpoint(deadline, previous, now)
+            evaluation_start = previous
+            if _changed_earlier_since_last_evaluation(effective, previous):
+                # A newly earlier deadline may have moved every checkpoint before
+                # the global watermark. Treat it like an initial observation so
+                # reconciliation can select one safe, current checkpoint now.
+                evaluation_start = None
+            checkpoint = crossed_checkpoint(deadline, evaluation_start, now)
             if checkpoint is None:
                 continue
 
@@ -105,26 +128,53 @@ class ReminderService:
             state = session.get(SchedulerState, SCHEDULER_STATE_KEY)
             return state.last_successful_at if state is not None else None
 
-    def _candidate_assignments(self) -> list[Assignment]:
+    def _assignments(self) -> list[tuple[Assignment, EffectiveAssignment]]:
         with self._sessions() as session:
             assignments = session.scalars(
                 select(Assignment)
                 .options(
                     selectinload(Assignment.course),
                     selectinload(Assignment.submission),
+                    selectinload(Assignment.snapshots),
+                    selectinload(Assignment.evidence)
+                    .selectinload(AssignmentEvidence.claim)
+                    .selectinload(Claim.source_record),
                 )
-                .where(
-                    Assignment.canvas_due_at.is_not(None),
-                    Assignment.published.is_(True),
-                )
-                .order_by(Assignment.canvas_due_at, Assignment.id)
+                .order_by(Assignment.id)
             ).all()
             return [
-                assignment
+                (assignment, self._assignment_projector(assignment))
                 for assignment in assignments
-                if assignment.submission is None
-                or assignment.submission.normalized_status not in COMPLETED_STATUSES
             ]
+
+    def _reconcile_deadline_version(
+        self,
+        assignment_id: int,
+        operational_due_at: datetime | None,
+    ) -> None:
+        """Cancel only unsent events belonging to obsolete deadline versions."""
+
+        current = _as_utc(operational_due_at) if operational_due_at is not None else None
+        with self._sessions() as session:
+            events = session.scalars(
+                select(ReminderEvent).where(
+                    ReminderEvent.assignment_id == assignment_id,
+                    ReminderEvent.status.in_(RECONCILABLE_EVENT_STATUSES),
+                )
+            ).all()
+            changed = False
+            for event in events:
+                if current is not None and _as_utc(event.deadline_at) == current:
+                    continue
+                event.status = "cancelled_deadline_change"
+                event.reason = (
+                    "Operational deadline was removed"
+                    if current is None
+                    else "Operational deadline changed; reminder version replaced"
+                )
+                changed = True
+            if changed:
+                session.commit()
 
     def _claim_event(
         self,
@@ -241,3 +291,20 @@ def _priority(checkpoint: int) -> int:
     if checkpoint <= 360:
         return 4
     return 3
+
+
+def _changed_earlier_since_last_evaluation(
+    assignment: EffectiveAssignment,
+    previous_evaluated_at: datetime | None,
+) -> bool:
+    previous_due = assignment.previous_due_at
+    current_due = assignment.operational_due_at
+    changed_at = assignment.deadline_changed_at
+    if previous_due is None or current_due is None or changed_at is None:
+        return False
+    if _as_utc(current_due) >= _as_utc(previous_due):
+        return False
+    return (
+        previous_evaluated_at is None
+        or _as_utc(changed_at) > _as_utc(previous_evaluated_at)
+    )

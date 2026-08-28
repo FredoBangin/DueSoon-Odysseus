@@ -7,6 +7,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from src.duesoon.api.dependencies import require_browser_session, require_csrf
+from src.duesoon.api.routes.evidence import confirmation_response, inspection_response
+from src.duesoon.api.schemas import (
+    ConfirmDeadlineRequest,
+    ConfirmDeadlineResponse,
+    EvidenceInspectionResponse,
+)
 from src.duesoon.google import GoogleAPIError
 
 router = APIRouter(prefix="/api/v1/dashboard", tags=["dashboard"],
@@ -155,6 +161,37 @@ def assistant_feedback(
 @router.get("/notifications")
 def notifications(request: Request, limit: Annotated[int, Query(ge=1, le=100)] = 50):
     return request.app.state.briefing.notifications(limit)
+
+
+@router.get(
+    "/assignments/{assignment_id}/evidence",
+    response_model=EvidenceInspectionResponse,
+)
+def assignment_evidence(assignment_id: int, request: Request) -> EvidenceInspectionResponse:
+    try:
+        return inspection_response(request.app.state.evidence.inspect(assignment_id))
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post(
+    "/assignments/{assignment_id}/confirm-deadline",
+    response_model=ConfirmDeadlineResponse,
+    dependencies=[Depends(require_csrf)],
+)
+def confirm_assignment_deadline(
+    assignment_id: int,
+    payload: ConfirmDeadlineRequest,
+    request: Request,
+) -> ConfirmDeadlineResponse:
+    try:
+        return confirmation_response(
+            request.app.state.evidence.confirm_deadline(assignment_id, payload.due_at)
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/notes")

@@ -3,17 +3,18 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from typing import Any, AsyncIterator
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 
 from src.duesoon import __version__
 from src.duesoon.api.dependencies import require_api_token
 from src.duesoon.api.routes.auth import STATIC as WEB_STATIC, router as auth_router
 from src.duesoon.api.routes.dashboard import router as dashboard_router
+from src.duesoon.api.routes.evidence import router as evidence_router
 from src.duesoon.api.schemas import (
     AssignmentResponse,
     CourseResponse,
@@ -47,9 +48,15 @@ from src.duesoon.persistence.database import (
     session_factory,
 )
 from src.duesoon.persistence.models import Assignment, Course
+from src.duesoon.assignments.effective import EffectiveAssignment, project_canvas_assignment
+from src.duesoon.intelligence.service import (
+    EvidenceInspectionService,
+    assignment_load_options,
+)
 from src.duesoon.reminders.scheduler import ReminderScheduler
 from src.duesoon.reminders.service import ReminderService
 from src.duesoon.retained import RetainedToolsService
+from src.duesoon.urgency.scoring import score_assignment
 
 
 def create_app(
@@ -88,6 +95,7 @@ def create_app(
     )
     runtime_auth = AuthService(runtime_settings, runtime_sessions)
     runtime_briefing = BriefingService(runtime_settings, runtime_sessions)
+    runtime_evidence = EvidenceInspectionService(runtime_sessions)
     runtime_learning = LearningService(runtime_sessions)
     runtime_retained = RetainedToolsService(runtime_sessions)
     runtime_model_settings = ModelSettingsService(
@@ -158,6 +166,7 @@ def create_app(
     application.state.reminder_scheduler = runtime_scheduler
     application.state.auth = runtime_auth
     application.state.briefing = runtime_briefing
+    application.state.evidence = runtime_evidence
     application.state.assistant = runtime_assistant
     application.state.learning = runtime_learning
     application.state.retained = runtime_retained
@@ -166,6 +175,7 @@ def create_app(
     application.mount("/assets", StaticFiles(directory=WEB_STATIC), name="assets")
     application.include_router(auth_router)
     application.include_router(dashboard_router)
+    application.include_router(evidence_router)
 
     @application.middleware("http")
     async def browser_security_headers(request: Request, call_next):
@@ -271,10 +281,15 @@ def create_app(
         with runtime_sessions() as session:
             assignments = session.scalars(
                 select(Assignment)
-                .options(selectinload(Assignment.course), selectinload(Assignment.submission))
+                .options(*assignment_load_options())
                 .order_by(Assignment.canvas_due_at, Assignment.id)
             ).all()
-            return [_assignment_response(item) for item in assignments]
+            effective = tuple(project_canvas_assignment(item) for item in assignments)
+            now = datetime.now(UTC)
+            return [
+                _assignment_response(item, projected, effective, now)
+                for item, projected in zip(assignments, effective, strict=True)
+            ]
 
     @application.get(
         "/api/v1/assignments/{assignment_id}",
@@ -286,19 +301,31 @@ def create_app(
         _authorization: None = Depends(require_api_token),
     ) -> AssignmentResponse:
         with runtime_sessions() as session:
-            assignment = session.scalar(
-                select(Assignment)
-                .where(Assignment.id == assignment_id)
-                .options(selectinload(Assignment.course), selectinload(Assignment.submission))
+            assignments = session.scalars(
+                select(Assignment).options(*assignment_load_options()).order_by(Assignment.id)
+            ).all()
+            effective = tuple(project_canvas_assignment(item) for item in assignments)
+            selected = next(
+                (
+                    (item, projected)
+                    for item, projected in zip(assignments, effective, strict=True)
+                    if item.id == assignment_id
+                ),
+                None,
             )
-            if assignment is None:
+            if selected is None:
                 raise HTTPException(status_code=404, detail="assignment not found")
-            return _assignment_response(assignment)
+            return _assignment_response(*selected, effective, datetime.now(UTC))
 
     return application
 
 
-def _assignment_response(assignment: Assignment) -> AssignmentResponse:
+def _assignment_response(
+    assignment: Assignment,
+    effective: EffectiveAssignment,
+    all_effective: tuple[EffectiveAssignment, ...],
+    now: datetime,
+) -> AssignmentResponse:
     submission = assignment.submission
     return AssignmentResponse(
         id=assignment.id,
@@ -316,6 +343,16 @@ def _assignment_response(assignment: Assignment) -> AssignmentResponse:
         grading_type=assignment.grading_type,
         html_url=assignment.html_url,
         published=assignment.published,
+        effective_due_at=effective.effective_due_at,
+        operational_due_at=effective.operational_due_at,
+        deadline_status=effective.deadline_status,
+        deadline_confidence=effective.deadline_confidence,
+        deadline_source_summary=effective.deadline_source_summary,
+        deadline_evidence_ids=list(effective.deadline_evidence_ids),
+        due_at_precision=effective.due_at_precision,
+        deadline_resolution_explanation=effective.deadline_resolution_explanation,
+        conflicting_due_at=list(effective.conflicting_due_at),
+        urgency=score_assignment(effective, all_effective, now).to_dict(),
         submission=(
             SubmissionResponse(
                 normalized_status=submission.normalized_status,

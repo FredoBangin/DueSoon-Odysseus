@@ -65,6 +65,8 @@ class SourceRecord(Base):
     parser_version: Mapped[str] = mapped_column(String(30), default="canvas-v1")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
+    claims: Mapped[list["Claim"]] = relationship(back_populates="source_record")
+
 
 class Assignment(Base):
     __tablename__ = "assignments"
@@ -96,6 +98,10 @@ class Assignment(Base):
     submission: Mapped["Submission | None"] = relationship(
         back_populates="assignment", cascade="all, delete-orphan", uselist=False
     )
+    snapshots: Mapped[list["AssignmentSnapshot"]] = relationship(
+        back_populates="assignment", cascade="all, delete-orphan"
+    )
+    evidence: Mapped[list["AssignmentEvidence"]] = relationship(back_populates="assignment")
 
 
 class AssignmentSnapshot(Base):
@@ -118,6 +124,8 @@ class AssignmentSnapshot(Base):
     submission_types: Mapped[list[str]] = mapped_column(JSON, default=list)
     observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    assignment: Mapped[Assignment] = relationship(back_populates="snapshots")
 
 
 class Submission(Base):
@@ -142,6 +150,82 @@ class Submission(Base):
     )
 
     assignment: Mapped[Assignment] = relationship(back_populates="submission")
+
+
+class Claim(Base):
+    """Append-only structured claim extracted from one immutable source version."""
+
+    __tablename__ = "claims"
+    __table_args__ = (
+        UniqueConstraint(
+            "source_record_id",
+            "extractor_version",
+            "claim_fingerprint",
+            name="uq_claim_source_extractor_fingerprint",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    source_record_id: Mapped[int] = mapped_column(
+        ForeignKey("source_records.id", ondelete="RESTRICT"), index=True
+    )
+    claim_type: Mapped[str] = mapped_column(String(50), index=True)
+    course_hint: Mapped[str | None] = mapped_column(String(500))
+    assignment_hint: Mapped[str | None] = mapped_column(String(1000))
+    normalized_value: Mapped[dict[str, Any]] = mapped_column(JSON)
+    source_locator: Mapped[str | None] = mapped_column(Text)
+    author_identity: Mapped[str | None] = mapped_column(String(500))
+    author_role: Mapped[str | None] = mapped_column(String(100))
+    source_published_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), index=True
+    )
+    source_observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    extraction_method: Mapped[str] = mapped_column(String(50))
+    extractor_version: Mapped[str] = mapped_column(String(100))
+    extraction_confidence: Mapped[float] = mapped_column(Float)
+    validation_status: Mapped[str] = mapped_column(String(30), index=True)
+    claim_fingerprint: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    source_record: Mapped[SourceRecord] = relationship(back_populates="claims")
+    assignment_links: Mapped[list["AssignmentEvidence"]] = relationship(
+        back_populates="claim"
+    )
+
+
+class AssignmentEvidence(Base):
+    """Auditable claim-to-assignment match and resolver feature snapshot."""
+
+    __tablename__ = "assignment_evidence"
+    __table_args__ = (
+        UniqueConstraint("assignment_id", "claim_id", name="uq_assignment_evidence_claim"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    assignment_id: Mapped[int] = mapped_column(
+        ForeignKey("assignments.id", ondelete="RESTRICT"), index=True
+    )
+    claim_id: Mapped[int] = mapped_column(
+        ForeignKey("claims.id", ondelete="RESTRICT"), index=True
+    )
+    course_match_score: Mapped[float] = mapped_column(Float)
+    assignment_match_score: Mapped[float] = mapped_column(Float)
+    authority_score: Mapped[float] = mapped_column(Float)
+    explicitness_score: Mapped[float] = mapped_column(Float, default=1.0)
+    precision: Mapped[str] = mapped_column(String(30), default="unknown")
+    owner_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+    author_verified: Mapped[bool] = mapped_column(Boolean, default=True)
+    source_current: Mapped[bool] = mapped_column(Boolean, default=True)
+    recency_features: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    corroboration_features: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    supersedes_evidence_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
+    conflict_group: Mapped[str | None] = mapped_column(String(100), index=True)
+    disposition: Mapped[str] = mapped_column(String(30), index=True)
+    explanation: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    assignment: Mapped[Assignment] = relationship(back_populates="evidence")
+    claim: Mapped[Claim] = relationship(back_populates="assignment_links")
 
 
 class SyncRun(Base):
@@ -227,6 +311,7 @@ class WebSession(Base):
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     csrf_token: Mapped[str] = mapped_column(String(128))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

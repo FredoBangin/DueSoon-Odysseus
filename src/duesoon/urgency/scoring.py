@@ -1,12 +1,25 @@
-"""Explainable urgency-v1 scoring."""
+"""Deterministic, explainable urgency-v2 orchestration."""
 
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Sequence
 
 from src.duesoon.assignments.effective import EffectiveAssignment
+from src.duesoon.urgency.config import DEFAULT_CONFIG, UrgencyConfig
+from src.duesoon.urgency.explanations import due_reason, utc
+from src.duesoon.urgency.factors import (
+    COMPLETE_STATES,
+    INACTIVE_STATES,
+    deadline_risk_factor,
+    due_date_change_factor,
+    overdue_factor,
+    submission_factor,
+    time_factor,
+    value_factor,
+    workload_factor,
+)
 
 
 @dataclass(frozen=True)
@@ -14,13 +27,15 @@ class UrgencyBreakdown:
     time_score: int
     value_score: int
     workload_score: int
+    deadline_risk_score: int
     due_date_change_score: int
     submission_score: int
+    overdue_score: int
     raw_score: int
     total: int
     level: str
     reasons: tuple[str, ...]
-    config_version: str = "urgency-v1"
+    config_version: str = DEFAULT_CONFIG.version
 
     def to_dict(self) -> dict[str, object]:
         value = asdict(self)
@@ -28,58 +43,72 @@ class UrgencyBreakdown:
         return value
 
 
-def _utc(value: datetime) -> datetime:
-    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+def time_remaining_score(
+    remaining: timedelta | None,
+    config: UrgencyConfig = DEFAULT_CONFIG,
+) -> int:
+    """Compatibility helper exposing urgency-v2 time pressure."""
 
-
-def time_remaining_score(remaining: timedelta | None) -> int:
-    if remaining is None or remaining > timedelta(days=7): return 0
-    if remaining > timedelta(days=3): return 8
-    if remaining > timedelta(hours=24): return 15
-    if remaining > timedelta(hours=12): return 25
-    if remaining > timedelta(hours=6): return 32
-    if remaining > timedelta(hours=1): return 42
-    if remaining > timedelta(minutes=15): return 50
-    return 55
-
-
-def _value(points: float | None) -> int:
-    if points is None: return 0
-    if points <= 10: return 2
-    if points <= 25: return 4
-    if points <= 50: return 7
-    if points <= 100: return 10
-    return 15
+    return time_factor(remaining, config).score
 
 
 def score_assignment(item: EffectiveAssignment, all_items: Sequence[EffectiveAssignment],
-                     now: datetime, earlier_move_hours: float | None = None) -> UrgencyBreakdown:
-    if item.submission_status in {"submitted", "graded"}:
-        return UrgencyBreakdown(0, 0, 0, 0, 0, 0, 0, "LOW", ("Work is complete",))
-    now = _utc(now)
-    due = _utc(item.operational_due_at) if item.operational_due_at else None
+                     now: datetime, earlier_move_hours: float | None = None,
+                     config: UrgencyConfig = DEFAULT_CONFIG) -> UrgencyBreakdown:
+    """Score one effective assignment without AI, I/O, or wall-clock access."""
+
+    status = item.submission_status.lower()
+    if status in COMPLETE_STATES | INACTIVE_STATES:
+        reason = "Work is complete" if status in COMPLETE_STATES else "Assignment is cancelled"
+        return UrgencyBreakdown(0, 0, 0, 0, 0, 0, 0, 0, 0, "LOW", (reason,), config.version)
+
+    now = utc(now)
+    due = utc(item.operational_due_at) if item.operational_due_at else None
     remaining = due - now if due else None
-    time_score = time_remaining_score(remaining)
-    value_score = _value(item.points_possible)
-    nearby = 0
-    if due:
-        for other in all_items:
-            if other.assignment_id == item.assignment_id or other.submission_status in {"submitted", "graded"} or not other.operational_due_at:
-                continue
-            if abs((_utc(other.operational_due_at) - due).total_seconds()) <= 86400:
-                nearby += 1
-    workload_score = (0, 4, 8, 12, 15)[min(nearby, 4)]
-    change_score = 0 if not earlier_move_hours else (10 if earlier_move_hours > 24 or (remaining and remaining <= timedelta(hours=6)) else 6 if earlier_move_hours >= 6 else 3)
-    submission_score = 10 if item.submission_status == "missing" else 5 if item.submission_status == "late" else 0
-    raw = time_score + value_score + workload_score + change_score + submission_score
-    total = min(raw, 100)
-    level = "CRITICAL" if total >= 85 else "HIGH" if total >= 60 else "MEDIUM" if total >= 30 else "LOW"
-    reasons = []
-    if remaining is None: reasons.append("No precise deadline is available")
-    elif remaining.total_seconds() < 0: reasons.append("Overdue and incomplete")
-    else: reasons.append(f"Due in {max(0, int(remaining.total_seconds() // 60))} minutes")
-    if item.points_possible is not None: reasons.append(f"Worth {item.points_possible:g} points")
-    if nearby: reasons.append(f"{nearby} other incomplete assignment(s) due within 24 hours")
-    if item.submission_status in {"missing", "late"}: reasons.append(f"Canvas marks this {item.submission_status}")
-    return UrgencyBreakdown(time_score, value_score, workload_score, change_score,
-                            submission_score, raw, total, level, tuple(reasons))
+
+    time_result = time_factor(remaining, config)
+    value_result = value_factor(item.points_possible, config)
+    workload_result = workload_factor(item, all_items, config)
+    deadline_result = deadline_risk_factor(item, config)
+    change_result = due_date_change_factor(
+        item, remaining, now, config, earlier_move_hours,
+    )
+    submission_result = submission_factor(status, config)
+    overdue_result = overdue_factor(remaining, config)
+    factors = (
+        time_result,
+        value_result,
+        workload_result,
+        deadline_result,
+        change_result,
+        submission_result,
+        overdue_result,
+    )
+
+    raw = sum(factor.score for factor in factors)
+    total = max(0, min(raw, 100))
+    if total >= config.critical_threshold:
+        level = "CRITICAL"
+    elif total >= config.high_threshold:
+        level = "HIGH"
+    elif total >= config.medium_threshold:
+        level = "MEDIUM"
+    else:
+        level = "LOW"
+
+    reasons = [due_reason(remaining)]
+    reasons.extend(reason for factor in factors for reason in factor.reasons)
+    return UrgencyBreakdown(
+        time_score=time_result.score,
+        value_score=value_result.score,
+        workload_score=workload_result.score,
+        deadline_risk_score=deadline_result.score,
+        due_date_change_score=change_result.score,
+        submission_score=submission_result.score,
+        overdue_score=overdue_result.score,
+        raw_score=raw,
+        total=total,
+        level=level,
+        reasons=tuple(reasons),
+        config_version=config.version,
+    )

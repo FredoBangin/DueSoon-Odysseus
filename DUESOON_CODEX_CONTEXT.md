@@ -693,6 +693,8 @@ Do not emit events for irrelevant source-field churn unless it can alter DueSoon
 
 ## 11. Urgency Algorithm: Explainable 0–100 Score
 
+> **Active implementation note (2026-08-28):** `urgency-v2` is the current runtime policy. It preserves the reviewed urgency-v1 anchors while adding bounded deadline-risk and overdue context, as recorded in `docs/architecture/0003-contextual-urgency-evidence.md`. The tables below remain the baseline calibration contract.
+
 Urgency is deterministic and explainable. It must not require an LLM call. The initial score is the clamped sum of five modular factors.
 
 ```text
