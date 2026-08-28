@@ -68,4 +68,6 @@ jobs:
         run: |
           set -euo pipefail
           pip install pip-audit==2.10.0
-          pip-audit -r requirements.txt -r requirements-optional.txt --strict
+          # requirements-dev.txt includes requirements.txt, so this audits both
+          # production and test dependencies without referencing removed legacy files.
+          pip-audit -r requirements-dev.txt --strict

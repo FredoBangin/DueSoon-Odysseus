@@ -10,7 +10,7 @@
 
 version: 2
 updates:
-  # Python dependencies (requirements.txt + requirements-optional.txt).
+  # Python dependencies (requirements.txt + requirements-dev.txt).
   - package-ecosystem: pip
     directory: "/"
     schedule:
