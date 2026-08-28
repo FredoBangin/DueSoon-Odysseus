@@ -16,6 +16,25 @@ export function renderDeferred(root,key){
   root.append(panel);
 }
 
+export async function renderEmail(root){
+  const value=await get("/api/v1/dashboard/gmail?limit=25");
+  root.replaceChildren();
+  const intro=node("article","","panel wide");
+  intro.append(node("h2","School email"),node("p","Read-only Gmail. DueSoon cannot send, delete, archive, or modify messages.","muted"));
+  root.append(intro);
+  if(!value.enabled){
+    root.append(node("p","Gmail is not configured on the Azure server yet.","empty"));
+    return;
+  }
+  if(!value.items.length) root.append(node("p","No matching inbox messages.","empty"));
+  for(const item of value.items){
+    const card=node("article","","panel");
+    card.append(node("h2",item.subject),node("p",item.from,"muted"),node("p",item.snippet));
+    if(item.attachments.length) card.append(node("small",`${item.attachments.length} attachment(s) · evidence metadata only`,"muted"));
+    root.append(card);
+  }
+}
+
 export async function renderReview(root){
   const value=await get("/api/v1/dashboard/review");
   root.replaceChildren();

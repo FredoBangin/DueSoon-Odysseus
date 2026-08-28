@@ -3,7 +3,7 @@ import {renderHome} from "./views/home.js";
 import {renderAssistant} from "./views/assistant.js";
 import {renderCalendar} from "./views/calendar.js";
 import {renderNotifications} from "./views/notifications.js";
-import {renderDeferred,renderReview,renderSettings} from "./views/foundations.js";
+import {renderDeferred,renderEmail,renderReview,renderSettings} from "./views/foundations.js";
 
 const root=document.querySelector("#content");
 const title=document.querySelector("#page-title");
@@ -32,6 +32,7 @@ async function show(view,question=""){
       renderHome(root,briefing,value=>show("assistant",value));
     }else if(view==="assistant") renderAssistant(root,question);
     else if(view==="calendar") await renderCalendar(root);
+    else if(view==="email") await renderEmail(root);
     else if(view==="notifications") await renderNotifications(root);
     else if(view==="review") await renderReview(root);
     else if(view==="settings") await renderSettings(root);

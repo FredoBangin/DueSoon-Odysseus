@@ -37,6 +37,7 @@ from src.duesoon.config.settings import DueSoonSettings, get_settings
 from src.duesoon.auth.service import AuthService
 from src.duesoon.dashboard.assistant import DeterministicAssistant
 from src.duesoon.dashboard.briefing import BriefingService
+from src.duesoon.google import GoogleWorkspaceClient, GoogleWorkspaceConfig
 from src.duesoon.notifications.ntfy import NtfyPublishError, NtfyPublisher
 from src.duesoon.notifications.service import NotificationService
 from src.duesoon.persistence.database import (
@@ -58,6 +59,7 @@ def create_app(
     notification_publisher: Any | None = None,
     reminder_scheduler: Any | None = None,
     model_provider: Any | None = None,
+    google_client: Any | None = None,
 ) -> FastAPI:
     """Create an isolated DueSoon application."""
 
@@ -97,6 +99,13 @@ def create_app(
         deterministic=DeterministicAssistant(),
         learning=runtime_learning,
     )
+    owned_google_client: GoogleWorkspaceClient | None = None
+    runtime_google = google_client
+    if runtime_google is None:
+        google_config = GoogleWorkspaceConfig()
+        if google_config.enabled:
+            owned_google_client = GoogleWorkspaceClient(google_config)
+            runtime_google = owned_google_client
     runtime_scheduler = reminder_scheduler
     if (
         runtime_scheduler is None
@@ -130,6 +139,8 @@ def create_app(
                 owned_canvas_client.close()
             if owned_notification_publisher is not None:
                 owned_notification_publisher.close()
+            if owned_google_client is not None:
+                owned_google_client.close()
             runtime_engine.dispose()
 
     application = FastAPI(
@@ -148,6 +159,7 @@ def create_app(
     application.state.assistant = runtime_assistant
     application.state.learning = runtime_learning
     application.state.model_settings = runtime_model_settings
+    application.state.google = runtime_google
     application.mount("/assets", StaticFiles(directory=WEB_STATIC), name="assets")
     application.include_router(auth_router)
     application.include_router(dashboard_router)

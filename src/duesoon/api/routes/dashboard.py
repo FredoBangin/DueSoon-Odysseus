@@ -1,12 +1,13 @@
 """Browser-session-only dashboard APIs."""
 
-from datetime import date
+from datetime import UTC, date, datetime, time
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from src.duesoon.api.dependencies import require_browser_session, require_csrf
+from src.duesoon.google import GoogleAPIError
 
 router = APIRouter(prefix="/api/v1/dashboard", tags=["dashboard"],
                    dependencies=[Depends(require_browser_session)])
@@ -47,9 +48,58 @@ def briefing(request: Request):
 @router.get("/calendar")
 def calendar(request: Request, start: date, end: date):
     try:
-        return request.app.state.briefing.calendar(start, end)
+        value = request.app.state.briefing.calendar(start, end)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    google = request.app.state.google
+    if google is not None and google.config.calendar_enabled:
+        try:
+            external = google.list_calendar_events(
+                start=datetime.combine(start, time.min, tzinfo=UTC),
+                end=datetime.combine(end, time.max, tzinfo=UTC),
+            )
+            for item in external:
+                starts_at = str(item.get("starts_at") or "")
+                local_date = starts_at[:10]
+                local_time = "All day" if item.get("all_day") else _event_time(starts_at)
+                value["events"].append({
+                    "id": f"google-{item['id']}",
+                    "assignment_id": None,
+                    "title": item["title"],
+                    "course_name": "Google Calendar",
+                    "starts_at": starts_at,
+                    "local_date": local_date,
+                    "local_time": local_time,
+                    "color": "#4285f4",
+                    "status": item["status"],
+                    "urgency_level": "LOW",
+                    "source": "google_calendar",
+                    "read_only": True,
+                    "external_url": item.get("html_url"),
+                })
+            value["events"].sort(key=lambda item: str(item["starts_at"]))
+        except GoogleAPIError:
+            value["google_calendar_status"] = "unavailable"
+    return value
+
+
+@router.get("/gmail")
+def gmail(
+    request: Request,
+    query: Annotated[str, Query(max_length=500)] = "label:inbox newer_than:90d",
+    limit: Annotated[int, Query(ge=1, le=50)] = 25,
+):
+    google = request.app.state.google
+    if google is None or not google.config.gmail_enabled:
+        return {"enabled": False, "items": [], "access": "read_only"}
+    try:
+        return {
+            "enabled": True,
+            "items": google.list_gmail_messages(query=query, limit=limit),
+            "access": "read_only",
+        }
+    except GoogleAPIError as exc:
+        raise HTTPException(status_code=502, detail="Gmail is temporarily unavailable") from exc
 
 
 @router.post("/assistant", dependencies=[Depends(require_csrf)])
@@ -122,6 +172,7 @@ def update_model_settings(payload: ModelSettingsRequest, request: Request):
 def settings(request: Request):
     value = request.app.state.settings
     model = request.app.state.model_settings.status()
+    google = request.app.state.google
     return {"canvas": {"configured": value.canvas_enabled, "status": "connected" if value.canvas_enabled else "disabled"},
             "notifications": {"configured": value.ntfy_enabled, "status": "connected" if value.ntfy_enabled else "disabled"},
             "scheduler": {"enabled": value.scheduler_enabled, "interval_seconds": value.scheduler_interval_seconds},
@@ -130,5 +181,15 @@ def settings(request: Request):
                 "model_assistant": "enabled" if model["enabled"] else (
                     "configured" if model["configured"] else "disabled"
                 ),
-                **{name: "deferred" for name in ("gmail", "google_calendar", "notes", "memory", "documents")},
+                "gmail": "connected" if google is not None and google.config.gmail_enabled else "disabled",
+                "google_calendar": "connected" if google is not None and google.config.calendar_enabled else "disabled",
+                **{name: "deferred" for name in ("notes", "memory", "documents")},
             }}
+
+
+def _event_time(value: str) -> str:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return parsed.strftime("%I:%M %p").lstrip("0")
+    except ValueError:
+        return ""
