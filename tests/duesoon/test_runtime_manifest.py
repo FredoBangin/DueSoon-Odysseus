@@ -110,7 +110,7 @@ def test_azure_caddy_routes_due_soon_api_and_ntfy_over_one_https_host() -> None:
     assert "reverse_proxy duesoon:7000" in caddyfile
     assert "reverse_proxy ntfy:80" in caddyfile
     assert "header Strict-Transport-Security" in caddyfile
-    assert "@duesoon path / /login /app /app/* /assets/* /api/* /health/*" in caddyfile
+    assert "@duesoon path / /login /app /app/* /assets/* /static/* /api/* /health/*" in caddyfile
     assert "Content-Security-Policy" in caddyfile
     assert "method POST PUT" in caddyfile
     assert "handle @ntfy_json_publish" in caddyfile

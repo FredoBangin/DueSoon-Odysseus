@@ -20,7 +20,7 @@
 		reverse_proxy ntfy:80
 	}
 
-	@duesoon path / /login /app /app/* /assets/* /api/* /health/* /docs* /redoc* /openapi.json
+	@duesoon path / /login /app /app/* /assets/* /static/* /api/* /health/* /docs* /redoc* /openapi.json
 	handle @duesoon {
 		header {
 			Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
