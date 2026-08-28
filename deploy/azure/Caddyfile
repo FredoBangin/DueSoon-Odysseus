@@ -10,6 +10,16 @@
 	header Referrer-Policy "no-referrer"
 	header -Server
 
+	# ntfy's authenticated JSON publisher posts to the server root. Route only
+	# mutating root requests to ntfy; browser GET / remains the DueSoon app.
+	@ntfy_json_publish {
+		method POST PUT
+		path /
+	}
+	handle @ntfy_json_publish {
+		reverse_proxy ntfy:80
+	}
+
 	@duesoon path / /login /app /app/* /assets/* /api/* /health/* /docs* /redoc* /openapi.json
 	handle @duesoon {
 		header {
