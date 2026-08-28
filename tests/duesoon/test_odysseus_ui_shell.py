@@ -130,6 +130,15 @@ def test_shell_uses_odysseus_sections_and_account_bar_for_all_due_soon_views() -
         assert f'data-view="{view}"' in html
 
 
+def test_compact_navigation_reuses_odysseus_svg_icons_not_placeholder_glyphs() -> None:
+    html = read("index.html")
+    rail = html.split('<div class="icon-rail"', 1)[1].split("</div>\n\n  <nav", 1)[0]
+
+    assert rail.count("<svg") >= 9
+    for placeholder in ("⌂", "◇", "□", "✉", "♢", "▤", "◉", "▧", "⚙"):
+        assert placeholder not in rail
+
+
 def test_inherited_odysseus_assets_are_included_in_production_build_context() -> None:
     dockerignore = (ROOT.parents[3] / ".dockerignore").read_text(encoding="utf-8")
     dockerfile = (ROOT.parents[3] / "Dockerfile").read_text(encoding="utf-8")
