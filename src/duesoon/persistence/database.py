@@ -59,11 +59,48 @@ def database_is_ready(engine: Any) -> bool:
 
 
 def create_schema(engine: Engine) -> None:
-    """Create prototype tables explicitly during application startup."""
+    """Create tables and apply forward-only compatibility migrations."""
 
     from src.duesoon.persistence.models import Base
 
     Base.metadata.create_all(engine)
+    _apply_schema_migrations(engine)
+
+
+def _apply_schema_migrations(engine: Engine) -> None:
+    """Upgrade the supported SQLite schema without rebuilding user data."""
+
+    if engine.dialect.name != "sqlite":
+        return
+    with engine.begin() as connection:
+        connection.execute(text(
+            "CREATE TABLE IF NOT EXISTS schema_migrations ("
+            "version INTEGER PRIMARY KEY, applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+        ))
+        applied = set(connection.execute(text("SELECT version FROM schema_migrations")).scalars())
+        if 1 in applied:
+            return
+        columns = {
+            row[1]
+            for row in connection.execute(text("PRAGMA table_info(reminder_events)"))
+        }
+        if "reminder_kind" not in columns:
+            connection.execute(text(
+                "ALTER TABLE reminder_events ADD COLUMN reminder_kind "
+                "VARCHAR(30) NOT NULL DEFAULT 'standard'"
+            ))
+        if "interval_key" not in columns:
+            connection.execute(text(
+                "ALTER TABLE reminder_events ADD COLUMN interval_key VARCHAR(50)"
+            ))
+        connection.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_reminder_adaptive_interval "
+            "ON reminder_events (assignment_id, deadline_at, reminder_kind, interval_key) "
+            "WHERE reminder_kind = 'adaptive'"
+        ))
+        connection.execute(
+            text("INSERT INTO schema_migrations(version) VALUES (1)")
+        )
 
 
 def session_factory(engine: Engine) -> sessionmaker[Session]:

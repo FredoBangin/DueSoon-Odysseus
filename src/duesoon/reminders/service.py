@@ -23,7 +23,7 @@ from src.duesoon.persistence.models import (
     ReminderEvent,
     SchedulerState,
 )
-from src.duesoon.reminders.checkpoints import crossed_checkpoint
+from src.duesoon.reminders.checkpoints import adaptive_interval_key, crossed_checkpoint
 
 
 COMPLETED_STATUSES = {"submitted", "graded"}
@@ -74,7 +74,8 @@ class ReminderService:
             ):
                 continue
             evaluation_start = previous
-            if _changed_earlier_since_last_evaluation(effective, previous):
+            changed_earlier = _changed_earlier_since_last_evaluation(effective, previous)
+            if changed_earlier:
                 # A newly earlier deadline may have moved every checkpoint before
                 # the global watermark. Treat it like an initial observation so
                 # reconciliation can select one safe, current checkpoint now.
@@ -83,7 +84,24 @@ class ReminderService:
             if checkpoint is None:
                 continue
 
-            event = self._claim_event(assignment.id, deadline, checkpoint, now)
+            interval_key = None
+            reminder_kind = "standard"
+            if (
+                changed_earlier
+                and (effective.deadline_change_hours or 0) >= 6
+            ):
+                interval_key = adaptive_interval_key(deadline - now)
+                if interval_key is not None:
+                    reminder_kind = "adaptive"
+
+            event = self._claim_event(
+                assignment.id,
+                deadline,
+                checkpoint,
+                now,
+                reminder_kind=reminder_kind,
+                interval_key=interval_key,
+            )
             if event is None:
                 continue
 
@@ -99,10 +117,31 @@ class ReminderService:
                 continue
 
             result = self._notifications.send_reminder(
-                idempotency_key=_dedup_key(assignment.id, deadline, checkpoint),
+                idempotency_key=_dedup_key(
+                    assignment.id,
+                    deadline,
+                    checkpoint,
+                    reminder_kind=reminder_kind,
+                    interval_key=interval_key,
+                ),
                 title=_title(assignment.course.name),
-                message=_message(assignment, deadline, checkpoint, now),
+                message=_message(
+                    assignment,
+                    deadline,
+                    checkpoint,
+                    now,
+                    earlier_move_hours=(
+                        effective.deadline_change_hours
+                        if reminder_kind == "adaptive"
+                        else None
+                    ),
+                ),
                 priority=_priority(checkpoint),
+                notification_kind=(
+                    "adaptive_deadline_change"
+                    if reminder_kind == "adaptive"
+                    else "deadline_checkpoint"
+                ),
             )
             final_status = (
                 "sent"
@@ -112,7 +151,11 @@ class ReminderService:
             self._finish_event(
                 event.id,
                 status=final_status,
-                reason=f"Crossed {checkpoint}-minute checkpoint",
+                reason=(
+                    f"Adaptive deadline change in interval {interval_key}"
+                    if reminder_kind == "adaptive"
+                    else f"Crossed {checkpoint}-minute checkpoint"
+                ),
                 delivery_id=result.delivery_id,
             )
             if final_status == "sent":
@@ -182,6 +225,9 @@ class ReminderService:
         deadline: datetime,
         checkpoint: int,
         now: datetime,
+        *,
+        reminder_kind: str = "standard",
+        interval_key: str | None = None,
     ) -> ReminderEvent | None:
         with self._sessions() as session:
             existing = session.scalar(
@@ -205,8 +251,14 @@ class ReminderService:
                 assignment_id=assignment_id,
                 deadline_at=deadline,
                 checkpoint_minutes=checkpoint,
+                reminder_kind=reminder_kind,
+                interval_key=interval_key,
                 status="claimed",
-                reason=f"Crossed {checkpoint}-minute checkpoint",
+                reason=(
+                    f"Adaptive deadline change in interval {interval_key}"
+                    if reminder_kind == "adaptive"
+                    else f"Crossed {checkpoint}-minute checkpoint"
+                ),
                 evaluated_at=now,
             )
             session.add(event)
@@ -259,8 +311,18 @@ def _as_utc(value: datetime) -> datetime:
     return value.astimezone(UTC)
 
 
-def _dedup_key(assignment_id: int, deadline: datetime, checkpoint: int) -> str:
-    return f"checkpoint:{assignment_id}:{_as_utc(deadline).isoformat()}:{checkpoint}"
+def _dedup_key(
+    assignment_id: int,
+    deadline: datetime,
+    checkpoint: int,
+    *,
+    reminder_kind: str = "standard",
+    interval_key: str | None = None,
+) -> str:
+    version = _as_utc(deadline).isoformat()
+    if reminder_kind == "adaptive":
+        return f"adaptive:{assignment_id}:{version}:{interval_key}"
+    return f"checkpoint:{assignment_id}:{version}:{checkpoint}"
 
 
 def _title(course_name: str) -> str:
@@ -272,14 +334,20 @@ def _message(
     deadline: datetime,
     checkpoint: int,
     now: datetime,
+    earlier_move_hours: float | None = None,
 ) -> str:
     remaining = _as_utc(deadline) - now
     total_minutes = max(0, int(remaining.total_seconds() // 60))
     hours, minutes = divmod(total_minutes, 60)
     due_text = f"{hours}h {minutes}m" if hours else f"{minutes}m"
+    change_text = (
+        f"Deadline moved {earlier_move_hours:g} hours earlier. "
+        if earlier_move_hours is not None
+        else ""
+    )
     message = (
         f"{assignment.canonical_title}\n"
-        f"Due in {due_text}. {checkpoint}-minute checkpoint.\n"
+        f"{change_text}Due in {due_text}. {checkpoint}-minute checkpoint.\n"
         f"{assignment.html_url or ''}"
     )
     return message[:1000]

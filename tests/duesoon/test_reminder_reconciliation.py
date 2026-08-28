@@ -20,6 +20,7 @@ from src.duesoon.persistence.models import (
     Assignment,
     AssignmentEvidence,
     Claim,
+    NotificationDelivery,
     ReminderEvent,
     SchedulerState,
     SourceRecord,
@@ -213,7 +214,13 @@ def test_earlier_deadline_cancels_old_event_and_sends_only_one_now(
             assert events[0].status == "cancelled_deadline_change"
             assert events[1].deadline_at.replace(tzinfo=UTC) == new_due
             assert events[1].checkpoint_minutes == 360
+            assert events[1].reminder_kind == "adaptive"
+            assert events[1].interval_key == "360:60"
             assert events[1].status == "sent"
+            delivery = session.get(NotificationDelivery, events[1].delivery_id)
+            assert delivery is not None
+            assert delivery.notification_kind == "adaptive_deadline_change"
+            assert "moved" in delivery.rendered_body.lower()
         assert summary.sent == 1
         assert canvas.refresh_calls == 1
         assert len(publisher.calls) == 1

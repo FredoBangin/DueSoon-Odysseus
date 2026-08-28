@@ -6,6 +6,19 @@ from datetime import UTC, datetime, timedelta
 
 
 CHECKPOINT_MINUTES = (1440, 720, 360, 60, 15)
+ADAPTIVE_NEXT_CHECKPOINT_BUFFER_MINUTES = 30
+
+
+def adaptive_interval_key(remaining: timedelta) -> str | None:
+    """Return an adjacent checkpoint interval only when adaptive timing is safe."""
+
+    minutes = remaining.total_seconds() / 60
+    for upper, lower in zip(CHECKPOINT_MINUTES, CHECKPOINT_MINUTES[1:]):
+        if lower < minutes <= upper:
+            if minutes - lower < ADAPTIVE_NEXT_CHECKPOINT_BUFFER_MINUTES:
+                return None
+            return f"{upper}:{lower}"
+    return None
 
 
 def crossed_checkpoint(

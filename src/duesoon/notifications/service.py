@@ -57,14 +57,15 @@ class NotificationService:
         title: str,
         message: str,
         priority: int,
+        notification_kind: str = "deadline_checkpoint",
     ) -> DeliveryResult:
         return self._send(
             idempotency_key=idempotency_key,
-            notification_kind="deadline_checkpoint",
+            notification_kind=notification_kind,
             title=title,
             message=message,
             priority=priority,
-            tags=["alarm_clock"],
+            tags=["warning" if notification_kind.startswith("adaptive") else "alarm_clock"],
         )
 
     def _send(

@@ -278,6 +278,8 @@ class ReminderEvent(Base):
     )
     deadline_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     checkpoint_minutes: Mapped[int] = mapped_column(Integer)
+    reminder_kind: Mapped[str] = mapped_column(String(30), default="standard")
+    interval_key: Mapped[str | None] = mapped_column(String(50))
     status: Mapped[str] = mapped_column(String(40), index=True)
     reason: Mapped[str] = mapped_column(Text)
     submission_recheck_status: Mapped[str | None] = mapped_column(String(30))

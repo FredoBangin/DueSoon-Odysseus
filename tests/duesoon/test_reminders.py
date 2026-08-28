@@ -6,7 +6,11 @@ from pathlib import Path
 import pytest
 from sqlalchemy import select
 
-from src.duesoon.reminders.checkpoints import CHECKPOINT_MINUTES, crossed_checkpoint
+from src.duesoon.reminders.checkpoints import (
+    CHECKPOINT_MINUTES,
+    adaptive_interval_key,
+    crossed_checkpoint,
+)
 from src.duesoon.canvas.sync import CanvasSyncService
 from src.duesoon.config.settings import DueSoonSettings
 from src.duesoon.notifications.ntfy import PublishResult
@@ -43,6 +47,23 @@ def test_first_evaluation_selects_nearest_crossed_checkpoint(
 
 def test_checkpoint_set_is_exact_product_contract() -> None:
     assert CHECKPOINT_MINUTES == (1440, 720, 360, 60, 15)
+
+
+@pytest.mark.parametrize(
+    ("remaining", "expected"),
+    [
+        (timedelta(hours=18), "1440:720"),
+        (timedelta(hours=5), "360:60"),
+        (timedelta(minutes=50), "60:15"),
+        (timedelta(minutes=70), None),
+        (timedelta(minutes=40), None),
+        (timedelta(minutes=10), None),
+    ],
+)
+def test_adaptive_interval_requires_30_minutes_before_next_standard_checkpoint(
+    remaining: timedelta, expected: str | None
+) -> None:
+    assert adaptive_interval_key(remaining) == expected
 
 
 def test_downtime_catchup_selects_only_most_recent_crossed_checkpoint() -> None:
