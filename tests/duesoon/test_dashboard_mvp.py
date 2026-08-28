@@ -96,6 +96,14 @@ def test_password_hash_round_trip() -> None:
     assert not verify_password("wrong-password-123", encoded)
 
 
+def test_login_clears_the_retired_ntfy_web_service_worker(tmp_path: Path) -> None:
+    client, _engine = build(tmp_path)
+    with client:
+        response = client.get("/login")
+    assert response.status_code == 200
+    assert response.headers["clear-site-data"] == '"cache", "storage"'
+
+
 def test_login_session_csrf_and_logout(tmp_path: Path) -> None:
     client, _engine = build(tmp_path)
     with client:

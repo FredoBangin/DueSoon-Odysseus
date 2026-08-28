@@ -66,7 +66,13 @@ def root(request: Request):
 
 @router.get("/login")
 def login_page() -> FileResponse:
-    return FileResponse(STATIC / "login.html", headers={"Cache-Control": "no-store"})
+    return FileResponse(
+        STATIC / "login.html",
+        headers={
+            "Cache-Control": "no-store",
+            "Clear-Site-Data": '"cache", "storage"',
+        },
+    )
 
 
 @router.get("/app")
