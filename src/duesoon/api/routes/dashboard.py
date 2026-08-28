@@ -40,6 +40,33 @@ class ModelSettingsRequest(BaseModel):
     call_budget: int | None = Field(default=None, ge=1, le=5)
 
 
+class NoteCreateRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=500)
+    body: str = Field(min_length=1, max_length=10000)
+    assignment_id: int | None = Field(default=None, ge=1)
+    course_id: int | None = Field(default=None, ge=1)
+
+
+class NoteUpdateRequest(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=500)
+    body: str | None = Field(default=None, min_length=1, max_length=10000)
+    archived: bool | None = None
+
+
+class MemoryCreateRequest(BaseModel):
+    memory_type: str = Field(min_length=1, max_length=50)
+    scope_type: str = Field(min_length=1, max_length=30)
+    scope_ref: str | None = Field(default=None, max_length=255)
+    label: str = Field(min_length=1, max_length=500)
+    value: str = Field(min_length=1, max_length=5000)
+
+
+class MemoryUpdateRequest(BaseModel):
+    label: str | None = Field(default=None, min_length=1, max_length=500)
+    value: str | None = Field(default=None, min_length=1, max_length=5000)
+    active: bool | None = None
+
+
 @router.get("/briefing")
 def briefing(request: Request):
     return request.app.state.briefing.snapshot()
@@ -130,6 +157,63 @@ def notifications(request: Request, limit: Annotated[int, Query(ge=1, le=100)] =
     return request.app.state.briefing.notifications(limit)
 
 
+@router.get("/notes")
+def notes(request: Request, include_archived: bool = False):
+    return {"items": request.app.state.retained.notes(include_archived=include_archived)}
+
+
+@router.post("/notes", dependencies=[Depends(require_csrf)])
+def create_note(payload: NoteCreateRequest, request: Request):
+    try:
+        return request.app.state.retained.create_note(**payload.model_dump())
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.patch("/notes/{note_id}", dependencies=[Depends(require_csrf)])
+def update_note(note_id: str, payload: NoteUpdateRequest, request: Request):
+    try:
+        return request.app.state.retained.update_note(
+            note_id, **payload.model_dump(exclude_none=True)
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/memories")
+def memories(request: Request, include_inactive: bool = False):
+    return {"items": request.app.state.retained.memories(include_inactive=include_inactive)}
+
+
+@router.post("/memories", dependencies=[Depends(require_csrf)])
+def create_memory(payload: MemoryCreateRequest, request: Request):
+    try:
+        return request.app.state.retained.create_memory(**payload.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.patch("/memories/{memory_id}", dependencies=[Depends(require_csrf)])
+def update_memory(memory_id: str, payload: MemoryUpdateRequest, request: Request):
+    try:
+        return request.app.state.retained.update_memory(
+            memory_id, **payload.model_dump(exclude_none=True)
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/documents")
+def documents(request: Request, limit: Annotated[int, Query(ge=1, le=250)] = 100):
+    return {"items": request.app.state.retained.documents(limit=limit), "access": "read_only"}
+
+
 @router.get("/review")
 def review(request: Request):
     return {
@@ -183,7 +267,9 @@ def settings(request: Request):
                 ),
                 "gmail": "connected" if google is not None and google.config.gmail_enabled else "disabled",
                 "google_calendar": "connected" if google is not None and google.config.calendar_enabled else "disabled",
-                **{name: "deferred" for name in ("notes", "memory", "documents")},
+                "notes": "enabled",
+                "memory": "owner-controlled",
+                "documents": "read-only",
             }}
 
 

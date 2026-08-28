@@ -1,21 +1,6 @@
 import {get,patch,post} from "../api.js";
 import {node} from "./home.js";
 
-const COPY={
-  email:["Email","Read-only Gmail evidence is next. Canvas Inbox and announcements are already part of the ingestion foundation."],
-  notes:["Notes","This retained Odysseus space will become assignment annotations and evidence notes."],
-  memory:["Memory","Approved academic aliases, explanation preferences, and matching feedback will live here."],
-  documents:["Documents","Canvas module, page, and course-file evidence ingestion is being connected here."],
-};
-
-export function renderDeferred(root,key){
-  root.replaceChildren();
-  const [title,copy]=COPY[key];
-  const panel=node("article","","panel wide");
-  panel.append(node("h2",title),node("p",copy),node("span","Retained from Odysseus · safe foundation","pill"));
-  root.append(panel);
-}
-
 export async function renderEmail(root){
   const value=await get("/api/v1/dashboard/gmail?limit=25");
   root.replaceChildren();
@@ -31,6 +16,81 @@ export async function renderEmail(root){
     const card=node("article","","panel");
     card.append(node("h2",item.subject),node("p",item.from,"muted"),node("p",item.snippet));
     if(item.attachments.length) card.append(node("small",`${item.attachments.length} attachment(s) · evidence metadata only`,"muted"));
+    root.append(card);
+  }
+}
+
+export async function renderNotes(root){
+  const value=await get("/api/v1/dashboard/notes");
+  root.replaceChildren();
+  const form=node("form","","panel wide form-stack");
+  form.append(node("h2","Academic notes"),node("p","Keep assignment context and your own observations here. Notes never change a deadline or submission state.","muted"));
+  const title=document.createElement("input"); title.required=true; title.maxLength=500; title.placeholder="Note title";
+  const body=document.createElement("textarea"); body.required=true; body.maxLength=10000; body.rows=4; body.placeholder="What should you remember?";
+  const save=node("button","Save note");
+  const result=node("p","","muted");
+  form.append(title,body,save,result);
+  form.onsubmit=async event=>{
+    event.preventDefault(); save.disabled=true;
+    try{ await post("/api/v1/dashboard/notes",{title:title.value,body:body.value}); await renderNotes(root); }
+    catch(error){ result.textContent=error.message; save.disabled=false; }
+  };
+  root.append(form);
+  if(!value.items.length){ root.append(node("p","No academic notes yet.","empty")); return; }
+  for(const item of value.items){
+    const card=node("article","","panel");
+    card.append(node("h2",item.title),node("p",item.body));
+    const context=[item.course_name,item.assignment_title].filter(Boolean).join(" · ");
+    if(context) card.append(node("small",context,"muted"));
+    const controls=node("div","","toolbar");
+    const archive=node("button","Archive","secondary");
+    archive.onclick=async()=>{ archive.disabled=true; await patch(`/api/v1/dashboard/notes/${item.id}`,{archived:true}); await renderNotes(root); };
+    controls.append(archive); card.append(controls); root.append(card);
+  }
+}
+
+export async function renderMemory(root){
+  const value=await get("/api/v1/dashboard/memories");
+  root.replaceChildren();
+  const form=node("form","","panel wide form-stack");
+  form.append(node("h2","Approved academic memory"),node("p","Store aliases, preferences, matching feedback, or source-reliability guidance. You control every entry.","muted"));
+  const type=document.createElement("select");
+  for(const option of ["alias","preference","matching_feedback","source_reliability"]){ const el=document.createElement("option"); el.value=option; el.textContent=option.replaceAll("_"," "); type.append(el); }
+  const scope=document.createElement("select");
+  for(const option of ["global","course","assignment","sender"]){ const el=document.createElement("option"); el.value=option; el.textContent=option; scope.append(el); }
+  const scopeRef=document.createElement("input"); scopeRef.maxLength=255; scopeRef.placeholder="Scope reference (optional)";
+  const label=document.createElement("input"); label.required=true; label.maxLength=500; label.placeholder="Short label";
+  const content=document.createElement("textarea"); content.required=true; content.maxLength=5000; content.rows=3; content.placeholder="What should DueSoon learn?";
+  const save=node("button","Save approved memory"); const result=node("p","","muted");
+  form.append(type,scope,scopeRef,label,content,save,result);
+  form.onsubmit=async event=>{
+    event.preventDefault(); save.disabled=true;
+    try{ await post("/api/v1/dashboard/memories",{memory_type:type.value,scope_type:scope.value,scope_ref:scopeRef.value||null,label:label.value,value:content.value}); await renderMemory(root); }
+    catch(error){ result.textContent=error.message; save.disabled=false; }
+  };
+  root.append(form);
+  if(!value.items.length){ root.append(node("p","No approved memory yet.","empty")); return; }
+  for(const item of value.items){
+    const card=node("article","","panel");
+    card.append(node("h2",item.label),node("p",item.value),node("small",`${item.memory_type.replaceAll("_"," ")} · ${item.scope_type}${item.scope_ref?` · ${item.scope_ref}`:""}`,"muted"));
+    const controls=node("div","","toolbar"); const disable=node("button","Deactivate","secondary");
+    disable.onclick=async()=>{ disable.disabled=true; await patch(`/api/v1/dashboard/memories/${item.id}`,{active:false}); await renderMemory(root); };
+    controls.append(disable); card.append(controls); root.append(card);
+  }
+}
+
+export async function renderDocuments(root){
+  const value=await get("/api/v1/dashboard/documents?limit=150");
+  root.replaceChildren();
+  const intro=node("article","","panel wide");
+  intro.append(node("h2","Canvas documents"),node("p","Read-only evidence catalog from Canvas files, pages, and modules. Raw document bodies and signed download URLs are not exposed here.","muted"));
+  root.append(intro);
+  if(!value.items.length){ root.append(node("p","No Canvas document evidence synced yet.","empty")); return; }
+  for(const item of value.items){
+    const card=node("article","","panel");
+    card.append(node("h2",item.title),node("p",item.course_name||"Canvas","muted"),node("span",item.source_type.replaceAll("_"," "),"pill"));
+    const details=[item.content_type,item.size?`${item.size} bytes`:null].filter(Boolean).join(" · ");
+    if(details) card.append(node("small",details,"muted"));
     root.append(card);
   }
 }

@@ -49,6 +49,7 @@ from src.duesoon.persistence.database import (
 from src.duesoon.persistence.models import Assignment, Course
 from src.duesoon.reminders.scheduler import ReminderScheduler
 from src.duesoon.reminders.service import ReminderService
+from src.duesoon.retained import RetainedToolsService
 
 
 def create_app(
@@ -88,6 +89,7 @@ def create_app(
     runtime_auth = AuthService(runtime_settings, runtime_sessions)
     runtime_briefing = BriefingService(runtime_settings, runtime_sessions)
     runtime_learning = LearningService(runtime_sessions)
+    runtime_retained = RetainedToolsService(runtime_sessions)
     runtime_model_settings = ModelSettingsService(
         ModelAssistantConfig(environment=runtime_settings.environment),
         runtime_sessions,
@@ -158,6 +160,7 @@ def create_app(
     application.state.briefing = runtime_briefing
     application.state.assistant = runtime_assistant
     application.state.learning = runtime_learning
+    application.state.retained = runtime_retained
     application.state.model_settings = runtime_model_settings
     application.state.google = runtime_google
     application.mount("/assets", StaticFiles(directory=WEB_STATIC), name="assets")
@@ -169,7 +172,7 @@ def create_app(
         response = await call_next(request)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("Referrer-Policy", "no-referrer")
-        if request.url.path.startswith(("/app", "/api/v1/dashboard", "/api/v1/auth")):
+        if request.url.path.startswith(("/app", "/assets", "/api/v1/dashboard", "/api/v1/auth")):
             response.headers.setdefault("Cache-Control", "no-store")
         return response
 

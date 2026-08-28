@@ -197,6 +197,8 @@ a { color: var(--fg); }
 .pill.medium { color: var(--warn); }
 .pill.low { color: var(--green); }
 .empty { color: var(--muted); padding: 20px 0; }
+.form-stack { display: grid; gap: 9px; }
+.form-stack h2, .form-stack p { margin-bottom: 2px; }
 
 .assistant-box { display: flex; gap: 8px; }
 input, textarea, select {

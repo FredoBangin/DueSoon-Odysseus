@@ -353,3 +353,45 @@ class LearningReversal(Base):
     reason: Mapped[str | None] = mapped_column(Text)
     actor: Mapped[str] = mapped_column(String(100), default="owner")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class AcademicNote(Base):
+    """Owner-authored assignment or course annotation."""
+
+    __tablename__ = "academic_notes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    public_id: Mapped[str] = mapped_column(String(36), unique=True, index=True)
+    assignment_id: Mapped[int | None] = mapped_column(
+        ForeignKey("assignments.id", ondelete="SET NULL"), index=True
+    )
+    course_id: Mapped[int | None] = mapped_column(
+        ForeignKey("courses.id", ondelete="SET NULL"), index=True
+    )
+    title: Mapped[str] = mapped_column(String(500))
+    body: Mapped[str] = mapped_column(Text)
+    archived: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class AcademicMemory(Base):
+    """Explicit owner-approved academic alias or preference."""
+
+    __tablename__ = "academic_memories"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    public_id: Mapped[str] = mapped_column(String(36), unique=True, index=True)
+    memory_type: Mapped[str] = mapped_column(String(50), index=True)
+    scope_type: Mapped[str] = mapped_column(String(30), index=True)
+    scope_ref: Mapped[str | None] = mapped_column(String(255), index=True)
+    label: Mapped[str] = mapped_column(String(500))
+    value: Mapped[str] = mapped_column(Text)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    created_by: Mapped[str] = mapped_column(String(50), default="owner")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )

@@ -3,7 +3,7 @@ import {renderHome} from "./views/home.js";
 import {renderAssistant} from "./views/assistant.js";
 import {renderCalendar} from "./views/calendar.js";
 import {renderNotifications} from "./views/notifications.js";
-import {renderDeferred,renderEmail,renderReview,renderSettings} from "./views/foundations.js";
+import {renderDocuments,renderEmail,renderMemory,renderNotes,renderReview,renderSettings} from "./views/foundations.js";
 
 const root=document.querySelector("#content");
 const title=document.querySelector("#page-title");
@@ -35,8 +35,11 @@ async function show(view,question=""){
     else if(view==="email") await renderEmail(root);
     else if(view==="notifications") await renderNotifications(root);
     else if(view==="review") await renderReview(root);
+    else if(view==="notes") await renderNotes(root);
+    else if(view==="memory") await renderMemory(root);
+    else if(view==="documents") await renderDocuments(root);
     else if(view==="settings") await renderSettings(root);
-    else renderDeferred(root,view);
+    else show("home");
   }catch(error){ root.textContent=`Unable to load this view: ${error.message}`; }
 }
 
