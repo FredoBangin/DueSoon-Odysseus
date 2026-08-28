@@ -115,6 +115,14 @@ def test_shell_uses_odysseus_sections_and_account_bar_for_all_due_soon_views() -
         assert f'data-view="{view}"' in html
 
 
+def test_inherited_odysseus_assets_are_included_in_production_build_context() -> None:
+    dockerignore = (ROOT.parents[3] / ".dockerignore").read_text(encoding="utf-8")
+    dockerfile = (ROOT.parents[3] / "Dockerfile").read_text(encoding="utf-8")
+
+    assert "\nstatic/\n" not in f"\n{dockerignore}"
+    assert "COPY --chown=duesoon:duesoon static ./static" in dockerfile
+
+
 def test_login_uses_same_odysseus_visual_language() -> None:
     html = read("login.html")
 
