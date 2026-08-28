@@ -22,7 +22,16 @@ from src.duesoon.api.schemas import (
     SyncResponse,
     TestNotificationRequest,
 )
+from src.duesoon.assistant import (
+    AssistantService,
+    LearningService,
+    ModelAssistantConfig,
+    ModelSettingsService,
+    OpenAICompatibleProvider,
+)
 from src.duesoon.canvas.client import CanvasAPIError, CanvasClient
+from src.duesoon.canvas.academic_sync import CanvasAcademicSync
+from src.duesoon.canvas.content_sync import CanvasContentSyncService
 from src.duesoon.canvas.sync import CanvasSyncService
 from src.duesoon.config.settings import DueSoonSettings, get_settings
 from src.duesoon.auth.service import AuthService
@@ -48,6 +57,7 @@ def create_app(
     canvas_sync_service: Any | None = None,
     notification_publisher: Any | None = None,
     reminder_scheduler: Any | None = None,
+    model_provider: Any | None = None,
 ) -> FastAPI:
     """Create an isolated DueSoon application."""
 
@@ -58,7 +68,11 @@ def create_app(
     runtime_canvas_sync = canvas_sync_service
     if runtime_canvas_sync is None and runtime_settings.canvas_enabled:
         owned_canvas_client = CanvasClient(runtime_settings)
-        runtime_canvas_sync = CanvasSyncService(owned_canvas_client, runtime_sessions)
+        core_canvas_sync = CanvasSyncService(owned_canvas_client, runtime_sessions)
+        runtime_canvas_sync = CanvasAcademicSync(
+            core_canvas_sync,
+            CanvasContentSyncService(owned_canvas_client, runtime_sessions),
+        )
     owned_notification_publisher: NtfyPublisher | None = None
     runtime_notification_publisher = notification_publisher
     if runtime_notification_publisher is None and runtime_settings.ntfy_enabled:
@@ -71,7 +85,18 @@ def create_app(
     )
     runtime_auth = AuthService(runtime_settings, runtime_sessions)
     runtime_briefing = BriefingService(runtime_settings, runtime_sessions)
-    runtime_assistant = DeterministicAssistant()
+    runtime_learning = LearningService(runtime_sessions)
+    runtime_model_settings = ModelSettingsService(
+        ModelAssistantConfig(environment=runtime_settings.environment),
+        runtime_sessions,
+    )
+    runtime_assistant = AssistantService(
+        runtime_sessions,
+        runtime_model_settings,
+        model_provider or OpenAICompatibleProvider(),
+        deterministic=DeterministicAssistant(),
+        learning=runtime_learning,
+    )
     runtime_scheduler = reminder_scheduler
     if (
         runtime_scheduler is None
@@ -121,6 +146,8 @@ def create_app(
     application.state.auth = runtime_auth
     application.state.briefing = runtime_briefing
     application.state.assistant = runtime_assistant
+    application.state.learning = runtime_learning
+    application.state.model_settings = runtime_model_settings
     application.mount("/assets", StaticFiles(directory=WEB_STATIC), name="assets")
     application.include_router(auth_router)
     application.include_router(dashboard_router)

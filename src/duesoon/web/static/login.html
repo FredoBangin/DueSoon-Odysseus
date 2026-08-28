@@ -1,9 +1,26 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Sign in · DueSoon</title><link rel="stylesheet" href="/assets/css/app.css"></head>
-<body class="login-page"><main class="login-card"><div class="brand-mark">D</div><h1>Welcome to DueSoon</h1>
-<p class="muted">Your private academic command center.</p><form id="login-form">
-<label>Username<input id="username" autocomplete="username" required maxlength="100"></label>
-<label>Password<input id="password" type="password" autocomplete="current-password" required maxlength="1024"></label>
-<button type="submit">Sign in</button><p id="login-error" class="error" role="alert"></p></form></main>
-<script type="module" src="/assets/js/login.js"></script></body></html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#282c34">
+  <title>Sign in · DueSoon</title>
+  <link rel="stylesheet" href="/assets/css/app.css">
+</head>
+<body class="login-page">
+  <main class="login-shell">
+    <div class="login-brand"><span>DueSoon</span><small>Built on the Odysseus interface</small></div>
+    <section class="login-card">
+      <p class="eyebrow">Private academic workspace</p>
+      <h1>Welcome back</h1>
+      <p class="muted">Sign in to view your current Canvas briefing and reminders.</p>
+      <form id="login-form">
+        <label for="username">Username</label><input id="username" autocomplete="username" required maxlength="100">
+        <label for="password">Password</label><input id="password" type="password" autocomplete="current-password" required maxlength="1024">
+        <button type="submit">Sign in</button><p id="login-error" class="error" role="alert"></p>
+      </form>
+    </section>
+  </main>
+  <script type="module" src="/assets/js/login.js"></script>
+</body>
+</html>

@@ -239,3 +239,117 @@ class LoginAttempt(Base):
     client_key: Mapped[str] = mapped_column(String(64), index=True)
     attempted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     successful: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class ModelAssistantSetting(Base):
+    """Non-secret, owner-controlled model routing limits.
+
+    Provider credentials remain process secrets and are never persisted here.
+    """
+
+    __tablename__ = "model_assistant_settings"
+
+    key: Mapped[str] = mapped_column(String(50), primary_key=True, default="default")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    base_url: Mapped[str | None] = mapped_column(Text)
+    primary_model: Mapped[str | None] = mapped_column(String(255))
+    fallback_models: Mapped[list[str]] = mapped_column(JSON, default=list)
+    timeout_seconds: Mapped[float] = mapped_column(Float, default=15.0)
+    max_input_tokens: Mapped[int] = mapped_column(Integer, default=6000)
+    max_output_tokens: Mapped[int] = mapped_column(Integer, default=700)
+    call_budget: Mapped[int] = mapped_column(Integer, default=2)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class AssistantExchange(Base):
+    """Auditable assistant response without prompts, secrets, or raw source payloads."""
+
+    __tablename__ = "assistant_exchanges"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    public_id: Mapped[str] = mapped_column(String(36), unique=True, index=True)
+    question: Mapped[str] = mapped_column(Text)
+    answer: Mapped[str] = mapped_column(Text)
+    mode: Mapped[str] = mapped_column(String(30))
+    model_name: Mapped[str | None] = mapped_column(String(255))
+    confidence: Mapped[str] = mapped_column(String(30))
+    evidence_links: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class AssistantFeedback(Base):
+    __tablename__ = "assistant_feedback"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    public_id: Mapped[str] = mapped_column(String(36), unique=True, index=True)
+    exchange_id: Mapped[int] = mapped_column(
+        ForeignKey("assistant_exchanges.id", ondelete="RESTRICT"), unique=True, index=True
+    )
+    verdict: Mapped[str] = mapped_column(String(30))
+    correction_prompted: Mapped[bool] = mapped_column(Boolean, default=False)
+    what_was_wrong: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class LearningProposal(Base):
+    __tablename__ = "learning_proposals"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    public_id: Mapped[str] = mapped_column(String(36), unique=True, index=True)
+    feedback_id: Mapped[int] = mapped_column(
+        ForeignKey("assistant_feedback.id", ondelete="RESTRICT"), unique=True, index=True
+    )
+    behavior_type: Mapped[str] = mapped_column(String(50), index=True)
+    scope_type: Mapped[str] = mapped_column(String(30), index=True)
+    scope_ref: Mapped[str | None] = mapped_column(String(255), index=True)
+    before_text: Mapped[str] = mapped_column(Text)
+    after_text: Mapped[str] = mapped_column(Text)
+    explanation: Mapped[str] = mapped_column(Text)
+    source_refs: Mapped[list[str]] = mapped_column(JSON, default=list)
+    affected_future_behavior: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(30), default="proposed", index=True)
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+    created_by: Mapped[str] = mapped_column(String(100), default="owner")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    rejected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reverted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class LearningAuditEvent(Base):
+    __tablename__ = "learning_audit_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    proposal_id: Mapped[int] = mapped_column(
+        ForeignKey("learning_proposals.id", ondelete="RESTRICT"), index=True
+    )
+    action: Mapped[str] = mapped_column(String(30), index=True)
+    before_state: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    after_state: Mapped[dict[str, Any]] = mapped_column(JSON)
+    revision: Mapped[int] = mapped_column(Integer)
+    actor: Mapped[str] = mapped_column(String(100), default="owner")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class LearningReversal(Base):
+    __tablename__ = "learning_reversals"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    proposal_id: Mapped[int] = mapped_column(
+        ForeignKey("learning_proposals.id", ondelete="RESTRICT"), index=True
+    )
+    audit_event_id: Mapped[int] = mapped_column(
+        ForeignKey("learning_audit_events.id", ondelete="RESTRICT"), index=True
+    )
+    reason: Mapped[str | None] = mapped_column(Text)
+    actor: Mapped[str] = mapped_column(String(100), default="owner")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
