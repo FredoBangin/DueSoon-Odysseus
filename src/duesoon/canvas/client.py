@@ -74,14 +74,83 @@ class CanvasClient:
             },
         )
 
-    def get_submission(self, course_id: str, assignment_id: str) -> dict[str, Any]:
-        url = urljoin(
-            f"{self.base_url}/",
-            (
-                f"api/v1/courses/{course_id}/assignments/"
-                f"{assignment_id}/submissions/self"
-            ),
+    def list_conversations(self, *, scope: str = "inbox") -> list[dict[str, Any]]:
+        """Return Canvas Inbox conversations without mutating read state."""
+        return self._paginate(
+            "/api/v1/conversations",
+            params={"per_page": 100, "scope": scope},
         )
+
+    def get_conversation(self, conversation_id: str) -> dict[str, Any]:
+        """Return one conversation, including its messages and attachments."""
+        return self._get_object(f"/api/v1/conversations/{conversation_id}")
+
+    def list_announcements(
+        self,
+        course_ids: list[str],
+        *,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return announcements for the supplied Canvas courses."""
+        if not course_ids:
+            return []
+        params: dict[str, Any] = {
+            "per_page": 100,
+            "context_codes[]": [f"course_{course_id}" for course_id in course_ids],
+            "active_only": True,
+        }
+        if start_date:
+            params["start_date"] = start_date
+        if end_date:
+            params["end_date"] = end_date
+        return self._paginate("/api/v1/announcements", params=params)
+
+    def list_modules(self, course_id: str) -> list[dict[str, Any]]:
+        """Return modules and inline item details when Canvas can provide them."""
+        return self._paginate(
+            f"/api/v1/courses/{course_id}/modules",
+            params={
+                "per_page": 100,
+                "include[]": ["items", "content_details"],
+            },
+        )
+
+    def list_module_items(
+        self, course_id: str, module_id: str
+    ) -> list[dict[str, Any]]:
+        """Return module items when Canvas omits them from the module listing."""
+        return self._paginate(
+            f"/api/v1/courses/{course_id}/modules/{module_id}/items",
+            params={"per_page": 100, "include[]": ["content_details"]},
+        )
+
+    def list_files(self, course_id: str) -> list[dict[str, Any]]:
+        """Return accessible course-file metadata, newest changes first."""
+        return self._paginate(
+            f"/api/v1/courses/{course_id}/files",
+            params={"per_page": 100, "sort": "updated_at", "order": "desc"},
+        )
+
+    def list_pages(self, course_id: str) -> list[dict[str, Any]]:
+        """Return course wiki-page metadata."""
+        return self._paginate(
+            f"/api/v1/courses/{course_id}/pages",
+            params={"per_page": 100, "sort": "updated_at", "order": "desc"},
+        )
+
+    def get_page(self, course_id: str, page_url: str) -> dict[str, Any]:
+        """Return one course wiki page including its body."""
+        return self._get_object(f"/api/v1/courses/{course_id}/pages/{page_url}")
+
+    def get_submission(self, course_id: str, assignment_id: str) -> dict[str, Any]:
+        return self._get_object(
+            f"/api/v1/courses/{course_id}/assignments/"
+            f"{assignment_id}/submissions/self"
+        )
+
+    def _get_object(self, path: str) -> dict[str, Any]:
+        url = urljoin(f"{self.base_url}/", path.lstrip("/"))
         self._assert_same_origin(url)
         response = self._request(url, params=None)
         payload = response.json()

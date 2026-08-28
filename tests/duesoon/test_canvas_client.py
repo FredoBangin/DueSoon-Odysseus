@@ -81,6 +81,41 @@ def test_get_submission_requests_current_user() -> None:
     assert submission["workflow_state"] == "submitted"
 
 
+def test_read_only_academic_content_endpoints() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.url.path == "/api/v1/conversations/7":
+            return httpx.Response(200, json={"id": 7, "messages": []})
+        if request.url.path.endswith("/pages/week-1"):
+            return httpx.Response(200, json={"url": "week-1", "body": "Read chapter 2"})
+        return httpx.Response(200, json=[])
+
+    client = CanvasClient(settings(), transport=httpx.MockTransport(handler))
+    try:
+        assert client.list_conversations() == []
+        assert client.get_conversation("7")["id"] == 7
+        assert client.list_announcements(["42"]) == []
+        assert client.list_modules("42") == []
+        assert client.list_module_items("42", "8") == []
+        assert client.list_files("42") == []
+        assert client.list_pages("42") == []
+        assert client.get_page("42", "week-1")["body"] == "Read chapter 2"
+    finally:
+        client.close()
+
+    by_path = {request.url.path: request for request in requests}
+    assert by_path["/api/v1/conversations"].url.params["scope"] == "inbox"
+    assert by_path["/api/v1/announcements"].url.params.get_list(
+        "context_codes[]"
+    ) == ["course_42"]
+    assert by_path["/api/v1/courses/42/modules"].url.params.get_list(
+        "include[]"
+    ) == ["items", "content_details"]
+    assert by_path["/api/v1/courses/42/files"].url.params["sort"] == "updated_at"
+
+
 def test_cross_origin_pagination_is_rejected() -> None:
     def handler(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(
