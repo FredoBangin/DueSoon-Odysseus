@@ -74,6 +74,21 @@ class CanvasClient:
             },
         )
 
+    def get_submission(self, course_id: str, assignment_id: str) -> dict[str, Any]:
+        url = urljoin(
+            f"{self.base_url}/",
+            (
+                f"api/v1/courses/{course_id}/assignments/"
+                f"{assignment_id}/submissions/self"
+            ),
+        )
+        self._assert_same_origin(url)
+        response = self._request(url, params=None)
+        payload = response.json()
+        if not isinstance(payload, dict):
+            raise CanvasAPIError("Canvas returned an invalid submission response")
+        return payload
+
     def _paginate(self, path: str, *, params: dict[str, Any]) -> list[dict[str, Any]]:
         url = urljoin(f"{self.base_url}/", path.lstrip("/"))
         items: list[dict[str, Any]] = []

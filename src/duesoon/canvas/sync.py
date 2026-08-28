@@ -32,6 +32,10 @@ class CanvasReader(Protocol):
 
     def list_assignments(self, course_id: str) -> list[dict[str, Any]]: ...
 
+    def get_submission(
+        self, course_id: str, assignment_id: str
+    ) -> dict[str, Any]: ...
+
 
 @dataclass(frozen=True)
 class SyncSummary:
@@ -144,6 +148,40 @@ class CanvasSyncService:
                 )
                 failure_session.commit()
             raise
+
+    def refresh_submission(self, assignment_id: int) -> str:
+        observed_at = self.clock()
+        with self.sessions() as session:
+            assignment = session.get(Assignment, assignment_id)
+            if assignment is None:
+                raise LookupError("assignment not found")
+            course = session.get(Course, assignment.course_id)
+            if course is None:
+                raise LookupError("course not found")
+
+            raw_submission = self.client.get_submission(
+                course.canvas_course_id,
+                assignment.canvas_assignment_id,
+            )
+            self._source_record(
+                session,
+                source_type="submission",
+                external_id=str(
+                    raw_submission.get("id")
+                    or f"{assignment.canvas_assignment_id}:current"
+                ),
+                course_id=course.id,
+                raw_payload=raw_submission,
+                observed_at=observed_at,
+            )
+            submission = self._upsert_submission(
+                session,
+                assignment,
+                raw_submission,
+                observed_at,
+            )
+            session.commit()
+            return submission.normalized_status
 
     @staticmethod
     def _upsert_course(

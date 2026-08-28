@@ -58,6 +58,29 @@ def test_assignment_request_includes_current_user_submission() -> None:
         client.close()
 
 
+def test_get_submission_requests_current_user() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/v1/courses/42/assignments/99/submissions/self"
+        return httpx.Response(
+            200,
+            json={
+                "id": 501,
+                "workflow_state": "submitted",
+                "submitted_at": "2026-08-27T02:00:00Z",
+                "missing": False,
+                "late": False,
+            },
+        )
+
+    client = CanvasClient(settings(), transport=httpx.MockTransport(handler))
+    try:
+        submission = client.get_submission("42", "99")
+    finally:
+        client.close()
+
+    assert submission["workflow_state"] == "submitted"
+
+
 def test_cross_origin_pagination_is_rejected() -> None:
     def handler(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(

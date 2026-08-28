@@ -56,6 +56,17 @@ class FakeCanvasClient:
             }
         ]
 
+    def get_submission(self, course_id: str, assignment_id: str):
+        assert course_id == "42"
+        assert assignment_id == "99"
+        return {
+            "id": 501,
+            "workflow_state": "submitted",
+            "submitted_at": "2026-08-27T02:00:00Z",
+            "missing": False,
+            "late": False,
+        }
+
 
 def build_service():
     engine = create_engine_from_settings(
@@ -109,5 +120,23 @@ def test_repeated_sync_is_idempotent() -> None:
             assert scalar_count(session, AssignmentSnapshot) == 1
             assert scalar_count(session, SyncRun) == 2
         assert second.source_versions_created == 0
+    finally:
+        engine.dispose()
+
+
+def test_refresh_submission_updates_only_requested_assignment() -> None:
+    engine, sessions, service = build_service()
+    try:
+        service.sync()
+
+        status = service.refresh_submission(1)
+
+        with sessions() as session:
+            submission = session.scalar(select(Submission))
+            assert submission is not None
+            assert submission.normalized_status == "submitted"
+            assert submission.submitted_at == datetime(2026, 8, 27, 2, 0)
+            assert scalar_count(session, Assignment) == 1
+        assert status == "submitted"
     finally:
         engine.dispose()
