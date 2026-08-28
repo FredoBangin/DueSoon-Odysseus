@@ -26,7 +26,7 @@ def create_engine_from_settings(settings: DueSoonSettings) -> Engine:
     is_sqlite = settings.database_url.startswith("sqlite")
     engine = create_engine(
         settings.database_url,
-        connect_args={"check_same_thread": False} if is_sqlite else {},
+        connect_args={"check_same_thread": False, "timeout": 30.0} if is_sqlite else {},
         pool_pre_ping=True,
     )
 
@@ -37,6 +37,10 @@ def create_engine_from_settings(settings: DueSoonSettings) -> Engine:
             cursor = dbapi_connection.cursor()
             try:
                 cursor.execute("PRAGMA foreign_keys=ON")
+                cursor.execute("PRAGMA busy_timeout=10000")
+                if engine.url.database != ":memory:":
+                    cursor.execute("PRAGMA journal_mode=WAL")
+                    cursor.execute("PRAGMA synchronous=NORMAL")
             finally:
                 cursor.close()
 

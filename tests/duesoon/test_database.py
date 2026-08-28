@@ -20,11 +20,15 @@ def test_engine_creates_sqlite_parent_and_enables_foreign_keys(tmp_path: Path) -
     try:
         with engine.connect() as connection:
             enabled = connection.execute(text("PRAGMA foreign_keys")).scalar_one()
+            journal_mode = connection.execute(text("PRAGMA journal_mode")).scalar_one()
+            busy_timeout = connection.execute(text("PRAGMA busy_timeout")).scalar_one()
     finally:
         engine.dispose()
 
     assert database_path.parent.is_dir()
     assert enabled == 1
+    assert journal_mode == "wal"
+    assert busy_timeout >= 10_000
 
 
 def test_database_readiness_executes_query() -> None:
