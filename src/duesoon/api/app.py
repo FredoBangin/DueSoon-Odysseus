@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, AsyncIterator
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
@@ -57,6 +58,9 @@ from src.duesoon.reminders.scheduler import ReminderScheduler
 from src.duesoon.reminders.service import ReminderService
 from src.duesoon.retained import RetainedToolsService
 from src.duesoon.urgency.scoring import score_assignment
+
+
+ODYSSEUS_STATIC = Path(__file__).resolve().parents[3] / "static"
 
 
 def create_app(
@@ -173,6 +177,11 @@ def create_app(
     application.state.model_settings = runtime_model_settings
     application.state.google = runtime_google
     application.mount("/assets", StaticFiles(directory=WEB_STATIC), name="assets")
+    application.mount(
+        "/static",
+        StaticFiles(directory=ODYSSEUS_STATIC),
+        name="odysseus-static",
+    )
     application.include_router(auth_router)
     application.include_router(dashboard_router)
     application.include_router(evidence_router)

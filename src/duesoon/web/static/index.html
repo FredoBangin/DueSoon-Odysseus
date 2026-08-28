@@ -2,44 +2,105 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="viewport" content="width=device-width,initial-scale=1,interactive-widget=resizes-content,viewport-fit=cover">
   <meta name="theme-color" content="#282c34">
+  <meta name="format-detection" content="telephone=no,date=no,address=no,email=no">
   <title>DueSoon</title>
+  <link rel="stylesheet" href="/static/style.css">
   <link rel="stylesheet" href="/assets/css/app.css">
 </head>
-<body>
-  <button id="sidebar-toggle" class="hamburger-btn" type="button" aria-label="Toggle navigation" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
-  <div id="mobile-backdrop" class="mobile-backdrop"></div>
-  <aside class="sidebar" aria-label="DueSoon navigation">
+<body class="bg-pattern-constellations">
+  <div id="mobile-backdrop"></div>
+  <button class="hamburger-btn" id="hamburger-btn" type="button" title="Show sidebar" aria-label="Show sidebar" aria-expanded="true">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </button>
+
+  <div class="icon-rail" id="icon-rail" aria-label="Compact navigation">
+    <div class="rail-resize-handle" id="rail-resize-handle"></div>
+    <button class="icon-rail-btn" type="button" data-view="home" title="Home">⌂</button>
+    <button class="icon-rail-btn" type="button" data-view="assistant" title="Assistant">◇</button>
+    <div class="rail-separator"></div>
+    <button class="icon-rail-btn" type="button" data-view="calendar" title="Calendar">□</button>
+    <button class="icon-rail-btn" type="button" data-view="email" title="Email">✉</button>
+    <button class="icon-rail-btn" type="button" data-view="notifications" title="Notifications">♢</button>
+    <button class="icon-rail-btn" type="button" data-view="notes" title="Notes">▤</button>
+    <button class="icon-rail-btn" type="button" data-view="memory" title="Brain">◉</button>
+    <button class="icon-rail-btn" type="button" data-view="documents" title="Documents">▧</button>
+    <div style="flex:1"></div>
+    <button class="icon-rail-btn" type="button" data-view="settings" title="Settings">⚙</button>
+  </div>
+
+  <nav class="sidebar" id="sidebar" aria-label="DueSoon navigation">
+    <div class="sidebar-resize-handle" id="sidebar-resize-handle"></div>
     <div class="sidebar-header">
-      <button class="sidebar-brand" type="button" data-view="home" title="DueSoon home"><span class="sidebar-brand-title">DueSoon</span><span class="sidebar-brand-subtitle">Odysseus academic workspace</span></button>
+      <button class="sidebar-hamburger" id="sidebar-toggle-btn" type="button" title="Toggle sidebar" aria-label="Toggle sidebar">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <button class="sidebar-brand" id="sidebar-brand-btn" type="button" data-view="home" title="DueSoon home"><span class="sidebar-brand-title">DueSoon</span></button>
     </div>
+
     <div class="sidebar-inner">
-      <nav id="nav" aria-label="Main">
-        <p class="section-title">Academic</p>
-        <button class="list-item active" type="button" data-view="home"><svg viewBox="0 0 24 24"><path d="M3 11 12 3l9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span>Home</span></button>
-        <button class="list-item" type="button" data-view="assistant"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>Assistant</span></button>
-        <button class="list-item" type="button" data-view="calendar"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg><span>Calendar</span></button>
-        <button class="list-item" type="button" data-view="email"><svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-9 6a2 2 0 0 1-2 0L2 7"/></svg><span>Email</span><span class="nav-state">read-only</span></button>
-        <button class="list-item" type="button" data-view="notifications"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg><span>Notifications</span></button>
-        <button class="list-item" type="button" data-view="review"><svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><span>Review</span></button>
-        <button class="list-item" type="button" data-view="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 15a2 2 0 0 0 .4 2l.1.1-2.8 2.8-.1-.1a2 2 0 0 0-2-.4 2 2 0 0 0-1.2 1.6V21h-4v-.1A2 2 0 0 0 8 19.3a2 2 0 0 0-2 .4l-.1.1-2.8-2.8.1-.1a2 2 0 0 0 .4-2A2 2 0 0 0 2 13.7V10h.1A2 2 0 0 0 3.7 8a2 2 0 0 0-.4-2l-.1-.1L6 3.1l.1.1a2 2 0 0 0 2 .4A2 2 0 0 0 9.3 2h4v.1A2 2 0 0 0 15 3.7a2 2 0 0 0 2-.4l.1-.1L20 6l-.1.1a2 2 0 0 0-.4 2A2 2 0 0 0 21 9.3V13h-.1A2 2 0 0 0 19 15z"/></svg><span>Settings</span></button>
-      </nav>
-      <nav class="retained" aria-label="Retained Odysseus tools">
-        <p class="section-title">Retained from Odysseus</p>
-        <button class="list-item" type="button" data-view="notes"><svg viewBox="0 0 24 24"><path d="M5 3h10l4 4v14H5zM15 3v5h5M8 17l7-7 2 2-7 7H8z"/></svg><span>Notes</span><span class="nav-state">academic</span></button>
-        <button class="list-item" type="button" data-view="memory"><svg viewBox="0 0 24 24"><path d="M12 5a3 3 0 1 0-6 0 4 4 0 0 0-2 7 4 4 0 0 0 8 1M12 5a3 3 0 1 1 6 0 4 4 0 0 1 2 7 4 4 0 0 1-8 1M12 5v14"/></svg><span>Memory</span><span class="nav-state">reviewed</span></button>
-        <button class="list-item" type="button" data-view="documents"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M8 13h8M8 17h6"/></svg><span>Documents</span><span class="nav-state">read-only</span></button>
-      </nav>
-      <div class="sidebar-spacer"></div>
-      <div class="sidebar-status"><span class="status-dot"></span><span id="sidebar-freshness">Checking Canvas</span></div>
-      <button id="logout" class="list-item logout" type="button"><svg viewBox="0 0 24 24"><path d="M10 17l5-5-5-5M15 12H3M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/></svg><span>Sign out</span></button>
+      <button class="list-item active" id="sidebar-new-chat-btn" type="button" data-view="assistant" title="Ask DueSoon">
+        <svg class="sidebar-action-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <span class="grow">Ask DueSoon</span>
+      </button>
+
+      <div class="section" id="academic-section">
+        <div class="section-header-flex"><button class="section-title" type="button" data-section-toggle="academic-items" aria-expanded="true"><span class="section-title-label">Academic</span></button></div>
+        <div id="academic-items" class="section-items">
+          <button class="list-item" type="button" data-view="home"><span class="grow">Home</span></button>
+          <button class="list-item" type="button" data-view="assistant"><span class="grow">Assistant</span></button>
+          <button class="list-item" type="button" data-view="calendar"><span class="grow">Calendar</span></button>
+          <button class="list-item" type="button" data-view="email"><span class="grow">Email</span></button>
+          <button class="list-item" type="button" data-view="notifications"><span class="grow">Notifications</span></button>
+          <button class="list-item" type="button" data-view="review"><span class="grow">Review</span></button>
+        </div>
+      </div>
+
+      <div class="section" id="retained-tools-section">
+        <div class="section-header-flex"><button class="section-title" type="button" data-section-toggle="retained-items" aria-expanded="true"><span class="section-title-label">Tools</span></button></div>
+        <div id="retained-items" class="section-items">
+          <button class="list-item" type="button" data-view="memory"><span class="grow">Memory</span></button>
+          <button class="list-item" type="button" data-view="documents"><span class="grow">Documents</span></button>
+          <button class="list-item" type="button" data-view="notes"><span class="grow">Notes</span></button>
+          <button class="list-item" type="button" data-view="settings"><span class="grow">Settings</span></button>
+          <div class="submenu-wrap">
+            <button class="list-item" id="tool-theme-btn" type="button" aria-expanded="false" aria-controls="theme-submenu"><span class="grow">Theme</span><span class="submenu-caret">⌄</span></button>
+            <div class="dropdown theme-submenu" id="theme-submenu" hidden>
+              <button class="dropdown-item" type="button" data-theme="dark">Dark</button>
+              <button class="dropdown-item" type="button" data-theme="midnight">Midnight</button>
+              <button class="dropdown-item" type="button" data-theme="ocean">Ocean</button>
+              <button class="dropdown-item" type="button" data-theme="forest">Forest</button>
+              <button class="dropdown-item" type="button" data-theme="ume">Ume</button>
+              <div class="sort-dropdown-sep"></div>
+              <button class="dropdown-item" type="button" data-bg-pattern="constellations">Constellations</button>
+              <button class="dropdown-item" type="button" data-bg-pattern="rain">Rain</button>
+              <button class="dropdown-item" type="button" data-bg-pattern="perlin-flow">Flow</button>
+              <button class="dropdown-item" type="button" data-bg-pattern="none">No animation</button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
-  </aside>
-  <main class="workspace">
-    <header class="workspace-header"><div><p class="eyebrow">DueSoon</p><h1 id="page-title">Home</h1></div><span id="freshness" class="status-pill">Loading</span></header>
+
+    <div class="sidebar-user-bar" id="sidebar-user-bar">
+      <button class="user-bar-left" id="user-bar-profile" type="button" data-view="settings" title="Account settings">
+        <span class="user-bar-avatar" id="user-bar-avatar">D</span><span class="user-bar-name" id="user-bar-name">DueSoon owner</span>
+      </button>
+      <div class="user-bar-actions">
+        <button type="button" class="user-bar-btn" id="user-bar-settings" data-view="settings" title="Settings" aria-label="Settings">⚙</button>
+        <button type="button" class="user-bar-btn logout" id="logout" title="Sign out" aria-label="Sign out">↪</button>
+      </div>
+    </div>
+  </nav>
+
+  <main class="chat-container welcome-active duesoon-workspace" id="chat-container" aria-label="DueSoon workspace">
+    <h1 class="a11y-visually-hidden">DueSoon</h1>
+    <div class="chat-top-bar"><div class="chat-meta-overlay"><span id="page-title">Home</span></div></div>
     <section id="content" class="workspace-content" aria-live="polite"></section>
   </main>
+
+  <script type="module" src="/assets/js/odysseus-shell.js"></script>
   <script type="module" src="/assets/js/app.js"></script>
 </body>
 </html>

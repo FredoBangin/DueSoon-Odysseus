@@ -67,6 +67,54 @@ def test_frontend_runtime_remains_bounded_and_browser_secret_free() -> None:
     assert "/api/v1/dashboard/calendar" in source
 
 
+def test_shell_does_not_surface_internal_canvas_freshness_badges() -> None:
+    html = read("index.html")
+    source = read("js/app.js")
+
+    assert "sidebar-freshness" not in html
+    assert 'id="freshness"' not in html
+    assert "Canvas fresh" not in html
+    assert "sidebarFresh" not in source
+    assert "fresh.textContent" not in source
+
+
+def test_shell_runs_inherited_odysseus_background_and_theme_controls() -> None:
+    html = read("index.html")
+    source = read("js/odysseus-shell.js")
+
+    assert 'class="bg-pattern-constellations"' in html
+    assert 'src="/assets/js/odysseus-shell.js"' in html
+    assert 'id="tool-theme-btn"' in html
+    assert 'id="theme-submenu"' in html
+    assert 'id="sidebar-toggle-btn"' in html
+    assert 'from "/static/js/theme.js"' in source
+    assert 'applyBgPattern("constellations")' in source
+    assert "applyColors" in source
+
+
+def test_shell_uses_odysseus_sections_and_account_bar_for_all_due_soon_views() -> None:
+    html = read("index.html")
+
+    assert 'class="section" id="academic-section"' in html
+    assert 'class="section" id="retained-tools-section"' in html
+    assert 'id="sidebar-user-bar"' in html
+    assert 'id="user-bar-profile"' in html
+    assert 'id="user-bar-settings"' in html
+    for view in (
+        "home",
+        "assistant",
+        "calendar",
+        "email",
+        "notifications",
+        "review",
+        "settings",
+        "notes",
+        "memory",
+        "documents",
+    ):
+        assert f'data-view="{view}"' in html
+
+
 def test_login_uses_same_odysseus_visual_language() -> None:
     html = read("login.html")
 

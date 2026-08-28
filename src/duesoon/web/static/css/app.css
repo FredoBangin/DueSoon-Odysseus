@@ -107,17 +107,6 @@ a { color: var(--fg); }
 .nav-state { margin-left: auto; color: var(--muted); font-size: 9px; }
 .retained { border-top: 1px solid color-mix(in srgb, var(--fg) 8%, transparent); margin-top: 10px; }
 .sidebar-spacer { flex: 1; min-height: 14px; }
-.sidebar-status {
-  margin: 5px 8px;
-  padding: 9px 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--muted);
-  font-size: 10px;
-  border-top: 1px solid color-mix(in srgb, var(--fg) 8%, transparent);
-}
-.status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px color-mix(in srgb, var(--green) 55%, transparent); }
 .logout { color: var(--red); }
 .hamburger-btn {
   position: fixed;

@@ -3,7 +3,7 @@
 **Status:** Approved product design  
 **Date:** 2026-08-27  
 **Foundation:** `DUESOON_CODEX_CONTEXT.md`  
-**Chosen approach:** Extract useful Odysseus interface patterns into the existing DueSoon FastAPI service.
+**Chosen approach:** Reuse the inherited Odysseus presentation shell in the existing DueSoon FastAPI service while keeping its legacy runtime inert.
 
 ## 1. Purpose
 
@@ -62,7 +62,7 @@ The MVP will not run or expose inherited shell execution, model hosting, cookboo
 
 ## 4. Chosen Architecture
 
-The DueSoon container will serve both the existing JSON API and a new static web application. The web layer will use focused HTML, CSS, and JavaScript modules rather than loading the existing monolithic Odysseus application. Proven visual patterns and small utilities may be copied and simplified, but all data access will use authenticated DueSoon APIs.
+The DueSoon container will serve both the existing JSON API and a static web application. The web layer directly reuses the inherited Odysseus stylesheet, navigation structure, submenus, theme system, and animated-background modules. It does not load the monolithic legacy application runtime or service worker. Focused DueSoon view modules own all behavior and use authenticated DueSoon APIs.
 
 ```mermaid
 flowchart LR

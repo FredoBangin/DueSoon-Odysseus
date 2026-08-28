@@ -7,14 +7,9 @@ import {renderDocuments,renderEmail,renderMemory,renderNotes,renderReview,render
 
 const root=document.querySelector("#content");
 const title=document.querySelector("#page-title");
-const fresh=document.querySelector("#freshness");
-const sidebarFresh=document.querySelector("#sidebar-freshness");
-const sidebarToggle=document.querySelector("#sidebar-toggle");
-const backdrop=document.querySelector("#mobile-backdrop");
 
 function closeSidebar(){
-  document.body.classList.remove("sidebar-open");
-  sidebarToggle.setAttribute("aria-expanded","false");
+  window.closeDueSoonSidebar?.();
 }
 
 async function show(view,question=""){
@@ -26,9 +21,6 @@ async function show(view,question=""){
   try{
     if(view==="home"){
       const briefing=await get("/api/v1/dashboard/briefing");
-      fresh.textContent=briefing.freshness.canvas_status;
-      fresh.className=`status-pill ${briefing.freshness.canvas_status}`;
-      sidebarFresh.textContent=`Canvas ${briefing.freshness.canvas_status}`;
       renderHome(root,briefing,value=>show("assistant",value));
     }else if(view==="assistant") renderAssistant(root,question);
     else if(view==="calendar") await renderCalendar(root);
@@ -50,10 +42,5 @@ document.querySelector("#logout").addEventListener("click",async()=>{
   await post("/api/v1/auth/logout",{});
   location.replace("/login");
 });
-sidebarToggle.addEventListener("click",()=>{
-  const open=document.body.classList.toggle("sidebar-open");
-  sidebarToggle.setAttribute("aria-expanded",String(open));
-});
-backdrop.addEventListener("click",closeSidebar);
 window.addEventListener("popstate",()=>show(location.pathname.split("/")[2]||"home"));
 show(location.pathname.split("/")[2]||"home");

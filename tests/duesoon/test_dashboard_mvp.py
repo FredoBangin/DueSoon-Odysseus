@@ -178,6 +178,25 @@ def test_web_assets_have_approved_tabs_and_no_browser_secret_storage(tmp_path: P
     assert "X-API-Token" not in source and "serviceWorker" not in source
 
 
+def test_dashboard_serves_inherited_odysseus_presentation_without_legacy_runtime(
+    tmp_path: Path,
+) -> None:
+    client, _engine = build(tmp_path)
+    with client:
+        style = client.get("/static/style.css")
+        assert style.status_code == 200
+        assert "Odysseus UI — Consolidated Stylesheet" in style.text
+
+        login(client)
+        shell = client.get("/app")
+        assert shell.status_code == 200
+        assert 'href="/static/style.css"' in shell.text
+        assert 'id="icon-rail"' in shell.text
+        assert 'id="sidebar-user-bar"' in shell.text
+        assert 'src="/static/app.js"' not in shell.text
+        assert 'src="/static/sw.js"' not in shell.text
+
+
 def test_briefing_uses_persisted_professor_correction_without_exposing_content(
     tmp_path: Path,
 ) -> None:

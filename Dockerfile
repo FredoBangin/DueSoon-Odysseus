@@ -15,6 +15,7 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY --chown=duesoon:duesoon src/duesoon ./src/duesoon
+COPY --chown=duesoon:duesoon static ./static
 
 USER duesoon
 
