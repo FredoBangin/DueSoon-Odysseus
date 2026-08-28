@@ -31,6 +31,8 @@ from src.duesoon.persistence.database import (
     session_factory,
 )
 from src.duesoon.persistence.models import Assignment, Course
+from src.duesoon.reminders.scheduler import ReminderScheduler
+from src.duesoon.reminders.service import ReminderService
 
 
 def create_app(
@@ -39,6 +41,7 @@ def create_app(
     engine: Any | None = None,
     canvas_sync_service: Any | None = None,
     notification_publisher: Any | None = None,
+    reminder_scheduler: Any | None = None,
 ) -> FastAPI:
     """Create an isolated DueSoon application."""
 
@@ -60,6 +63,21 @@ def create_app(
         runtime_sessions,
         runtime_notification_publisher,
     )
+    runtime_scheduler = reminder_scheduler
+    if (
+        runtime_scheduler is None
+        and runtime_settings.scheduler_enabled
+        and runtime_canvas_sync is not None
+    ):
+        reminder_service = ReminderService(
+            runtime_sessions,
+            runtime_canvas_sync,
+            runtime_notifications,
+        )
+        runtime_scheduler = ReminderScheduler(
+            reminder_service,
+            interval_seconds=runtime_settings.scheduler_interval_seconds,
+        )
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
@@ -67,9 +85,13 @@ def create_app(
             create_schema(runtime_engine)
         except Exception:
             pass
+        if runtime_scheduler is not None:
+            runtime_scheduler.start()
         try:
             yield
         finally:
+            if runtime_scheduler is not None:
+                await runtime_scheduler.stop()
             if owned_canvas_client is not None:
                 owned_canvas_client.close()
             if owned_notification_publisher is not None:
@@ -86,6 +108,7 @@ def create_app(
     application.state.sessions = runtime_sessions
     application.state.canvas_sync = runtime_canvas_sync
     application.state.notifications = runtime_notifications
+    application.state.reminder_scheduler = runtime_scheduler
 
     @application.get("/health/live", tags=["health"])
     def liveness() -> dict[str, str]:

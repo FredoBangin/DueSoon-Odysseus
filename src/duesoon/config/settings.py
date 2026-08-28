@@ -28,6 +28,7 @@ class DueSoonSettings(BaseSettings):
     dry_run: bool = True
     scheduler_enabled: bool = False
     scheduler_workers: int = Field(default=1, ge=1)
+    scheduler_interval_seconds: int = Field(default=300, ge=30, le=3600)
     api_token: SecretStr | None = None
 
     ntfy_enabled: bool = False
@@ -50,6 +51,12 @@ class DueSoonSettings(BaseSettings):
             and self.scheduler_workers != 1
         ):
             raise ValueError("SQLite requires exactly one scheduler worker")
+
+        if self.scheduler_enabled and not self.canvas_enabled:
+            raise ValueError("scheduler requires Canvas ingestion")
+
+        if self.scheduler_enabled and not self.dry_run and not self.ntfy_enabled:
+            raise ValueError("live scheduler requires ntfy delivery")
 
         if self.environment == "production" and self.api_token is None:
             raise ValueError("DUESOON_API_TOKEN is required in production")

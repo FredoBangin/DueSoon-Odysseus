@@ -12,6 +12,7 @@ DUESOON_ENV_VARS = (
     "DUESOON_DRY_RUN",
     "DUESOON_SCHEDULER_ENABLED",
     "DUESOON_SCHEDULER_WORKERS",
+    "DUESOON_SCHEDULER_INTERVAL_SECONDS",
     "DUESOON_API_TOKEN",
     "DUESOON_NTFY_ENABLED",
     "DUESOON_NTFY_URL",
@@ -39,6 +40,7 @@ def test_safe_defaults_are_dry_run_and_single_worker() -> None:
     assert settings.dry_run is True
     assert settings.scheduler_enabled is False
     assert settings.scheduler_workers == 1
+    assert settings.scheduler_interval_seconds == 300
     assert settings.ntfy_enabled is False
     assert settings.canvas_enabled is False
     assert settings.canvas_timeout_seconds == 15.0
@@ -49,13 +51,22 @@ def test_environment_values_are_parsed(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DUESOON_ENV", "production")
     monkeypatch.setenv("DUESOON_DRY_RUN", "false")
     monkeypatch.setenv("DUESOON_SCHEDULER_ENABLED", "true")
+    monkeypatch.setenv("DUESOON_SCHEDULER_INTERVAL_SECONDS", "600")
     monkeypatch.setenv("DUESOON_API_TOKEN", "test-api-token")
+    monkeypatch.setenv("DUESOON_CANVAS_ENABLED", "true")
+    monkeypatch.setenv("DUESOON_CANVAS_BASE_URL", "https://canvas.example.test")
+    monkeypatch.setenv("DUESOON_CANVAS_ACCESS_TOKEN", "canvas-secret")
+    monkeypatch.setenv("DUESOON_NTFY_ENABLED", "true")
+    monkeypatch.setenv("DUESOON_NTFY_URL", "https://ntfy.example.test")
+    monkeypatch.setenv("DUESOON_NTFY_TOPIC", "student-topic")
+    monkeypatch.setenv("DUESOON_NTFY_TOKEN", "ntfy-secret")
 
     settings = DueSoonSettings(_env_file=None)
 
     assert settings.environment == "production"
     assert settings.dry_run is False
     assert settings.scheduler_enabled is True
+    assert settings.scheduler_interval_seconds == 600
     assert settings.api_token is not None
     assert settings.api_token.get_secret_value() == "test-api-token"
 
@@ -66,6 +77,23 @@ def test_sqlite_scheduler_rejects_multiple_workers() -> None:
             _env_file=None,
             scheduler_enabled=True,
             scheduler_workers=2,
+        )
+
+
+def test_scheduler_requires_canvas_ingestion() -> None:
+    with pytest.raises(ValidationError, match="Canvas ingestion"):
+        DueSoonSettings(_env_file=None, scheduler_enabled=True)
+
+
+def test_live_scheduler_requires_ntfy_delivery() -> None:
+    with pytest.raises(ValidationError, match="ntfy delivery"):
+        DueSoonSettings(
+            _env_file=None,
+            scheduler_enabled=True,
+            dry_run=False,
+            canvas_enabled=True,
+            canvas_base_url="https://canvas.example.test",
+            canvas_access_token="canvas-secret",
         )
 
 
