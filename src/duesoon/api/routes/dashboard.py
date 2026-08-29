@@ -273,7 +273,11 @@ def review(request: Request):
     return {
         "enabled": True,
         "items": request.app.state.learning.list_proposals(),
-        "message": "Owner approval is required before any learning guidance becomes active.",
+        "evidence_items": request.app.state.evidence_review.list_pending(),
+        "message": (
+            "Review unresolved evidence and learning proposals. Protected academic state "
+            "changes still require validated evidence or owner confirmation."
+        ),
     }
 
 

@@ -54,6 +54,11 @@ from src.duesoon.intelligence.service import (
     EvidenceInspectionService,
     assignment_load_options,
 )
+from src.duesoon.intelligence.pipeline import (
+    CanvasEvidencePipeline,
+    StructuredClaimExtractor,
+)
+from src.duesoon.intelligence.review import EvidenceReviewService
 from src.duesoon.reminders.scheduler import ReminderScheduler
 from src.duesoon.reminders.service import ReminderService
 from src.duesoon.retained import RetainedToolsService
@@ -72,12 +77,26 @@ def create_app(
     reminder_scheduler: Any | None = None,
     model_provider: Any | None = None,
     google_client: Any | None = None,
+    claim_extractor: Any | None = None,
 ) -> FastAPI:
     """Create an isolated DueSoon application."""
 
     runtime_settings = settings or get_settings()
     runtime_engine = engine or create_engine_from_settings(runtime_settings)
     runtime_sessions = session_factory(runtime_engine)
+    runtime_model_settings = ModelSettingsService(
+        ModelAssistantConfig(environment=runtime_settings.environment),
+        runtime_sessions,
+    )
+    runtime_model_provider = model_provider or OpenAICompatibleProvider()
+    runtime_claim_extractor = claim_extractor or StructuredClaimExtractor(
+        runtime_model_settings,
+        runtime_model_provider,
+    )
+    runtime_evidence_pipeline = CanvasEvidencePipeline(
+        runtime_sessions,
+        runtime_claim_extractor,
+    )
     owned_canvas_client: CanvasClient | None = None
     runtime_canvas_sync = canvas_sync_service
     if runtime_canvas_sync is None and runtime_settings.canvas_enabled:
@@ -86,6 +105,7 @@ def create_app(
         runtime_canvas_sync = CanvasAcademicSync(
             core_canvas_sync,
             CanvasContentSyncService(owned_canvas_client, runtime_sessions),
+            evidence=runtime_evidence_pipeline,
         )
     owned_notification_publisher: NtfyPublisher | None = None
     runtime_notification_publisher = notification_publisher
@@ -100,17 +120,14 @@ def create_app(
     runtime_auth = AuthService(runtime_settings, runtime_sessions)
     runtime_briefing = BriefingService(runtime_settings, runtime_sessions)
     runtime_evidence = EvidenceInspectionService(runtime_sessions)
+    runtime_evidence_review = EvidenceReviewService(runtime_sessions)
     runtime_learning = LearningService(runtime_sessions)
     runtime_retained = RetainedToolsService(runtime_sessions)
     runtime_google_evidence = GoogleEvidenceService(runtime_sessions)
-    runtime_model_settings = ModelSettingsService(
-        ModelAssistantConfig(environment=runtime_settings.environment),
-        runtime_sessions,
-    )
     runtime_assistant = AssistantService(
         runtime_sessions,
         runtime_model_settings,
-        model_provider or OpenAICompatibleProvider(),
+        runtime_model_provider,
         deterministic=DeterministicAssistant(),
         learning=runtime_learning,
     )
@@ -172,12 +189,14 @@ def create_app(
     application.state.auth = runtime_auth
     application.state.briefing = runtime_briefing
     application.state.evidence = runtime_evidence
+    application.state.evidence_review = runtime_evidence_review
     application.state.assistant = runtime_assistant
     application.state.learning = runtime_learning
     application.state.retained = runtime_retained
     application.state.model_settings = runtime_model_settings
     application.state.google = runtime_google
     application.state.google_evidence = runtime_google_evidence
+    application.state.evidence_pipeline = runtime_evidence_pipeline
     application.mount("/assets", StaticFiles(directory=WEB_STATIC), name="assets")
     application.mount(
         "/static",

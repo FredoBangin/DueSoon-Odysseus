@@ -52,6 +52,42 @@ def test_model_router_uses_backup_only_after_transient_failure() -> None:
     assert answer.calls_used == 2
 
 
+def test_model_provider_returns_generic_bounded_json_for_extractors() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        assert body["response_format"] == {"type": "json_object"}
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {"message": {"content": '{"claims":[{"claim_type":"deadline_is"}]}'}}
+                ]
+            },
+        )
+
+    provider = OpenAICompatibleProvider(
+        lambda timeout: httpx.Client(
+            timeout=timeout, transport=httpx.MockTransport(handler)
+        )
+    )
+    value = provider.complete_json(
+        EffectiveModelSettings(
+            enabled=True,
+            base_url="https://models.example/v1",
+            api_key=SecretStr("not-returned"),
+            primary_model="primary",
+            fallback_models=(),
+            timeout_seconds=3,
+            max_input_tokens=1000,
+            max_output_tokens=100,
+            call_budget=1,
+        ),
+        [{"role": "user", "content": "Extract claims"}],
+    )
+
+    assert value == {"claims": [{"claim_type": "deadline_is"}]}
+
+
 def test_feedback_requires_explanation_and_review_is_reversible(tmp_path: Path) -> None:
     settings = DueSoonSettings(
         _env_file=None,
@@ -98,6 +134,9 @@ def test_feedback_requires_explanation_and_review_is_reversible(tmp_path: Path) 
         proposal = corrected.json()["proposal"]
         assert proposal["status"] == "proposed"
         assert "Cannot alter deadlines" in proposal["affected_future_behavior"]
+        listing = client.get("/api/v1/dashboard/review").json()
+        assert listing["items"][0]["status"] == "proposed"
+        assert listing["evidence_items"] == []
 
         assert client.post(
             f"/api/v1/dashboard/review/{proposal['id']}",

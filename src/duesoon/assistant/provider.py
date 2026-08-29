@@ -58,6 +58,24 @@ class OpenAICompatibleProvider:
         settings: EffectiveModelSettings,
         messages: Sequence[dict[str, str]],
     ) -> ProviderAnswer:
+        value, model, calls = self._complete_json(settings, messages)
+        return self._parse_value(value, model=model, calls_used=calls)
+
+    def complete_json(
+        self,
+        settings: EffectiveModelSettings,
+        messages: Sequence[dict[str, str]],
+    ) -> dict[str, Any]:
+        """Return one validated JSON object for a bounded schema consumer."""
+
+        value, _model, _calls = self._complete_json(settings, messages)
+        return value
+
+    def _complete_json(
+        self,
+        settings: EffectiveModelSettings,
+        messages: Sequence[dict[str, str]],
+    ) -> tuple[dict[str, Any], str, int]:
         if not settings.configured or not settings.enabled:
             raise ProviderUnavailable("model provider is disabled")
         encoded_size = len(json.dumps(messages, ensure_ascii=False).encode("utf-8"))
@@ -99,18 +117,27 @@ class OpenAICompatibleProvider:
                     continue
                 if response.status_code < 200 or response.status_code >= 300:
                     raise ProviderRejected(f"model provider rejected request ({response.status_code})")
-                return self._parse_response(response, model=model, calls_used=calls)
+                return self._parse_json_response(response), model, calls
 
         raise ProviderUnavailable(last_transient)
 
     @staticmethod
-    def _parse_response(
-        response: httpx.Response, *, model: str, calls_used: int
-    ) -> ProviderAnswer:
+    def _parse_json_response(response: httpx.Response) -> dict[str, Any]:
         try:
             payload: Any = response.json()
             content = payload["choices"][0]["message"]["content"]
             value = json.loads(content) if isinstance(content, str) else content
+            if not isinstance(value, dict):
+                raise ValueError
+            return value
+        except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise InvalidProviderResponse("model provider returned invalid structured output") from exc
+
+    @staticmethod
+    def _parse_value(
+        value: dict[str, Any], *, model: str, calls_used: int
+    ) -> ProviderAnswer:
+        try:
             answer = value["answer"].strip()
             confidence = value.get("confidence", "unknown")
             evidence_ids = value.get("evidence_ids", [])

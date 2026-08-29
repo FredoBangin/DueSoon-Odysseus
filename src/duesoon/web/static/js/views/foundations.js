@@ -53,7 +53,28 @@ export async function renderDocuments(root){
 export async function renderReview(root){
   const value=await get("/api/v1/dashboard/review");root.replaceChildren();
   const intro=node("article","",card);intro.append(node("h2","Learning review"),node("p",value.message,muted));root.append(intro);
-  if(!value.items.length){root.append(node("p","No learning proposals yet.",muted));return;}
+  const evidenceItems=value.evidence_items||[];
+  if(evidenceItems.length){
+    root.append(node("h2","Academic evidence to review"));
+    for(const item of evidenceItems){
+      const review=node("article","",card);
+      const title=item.assignment_title||item.assignment_hint||"Unmatched academic claim";
+      const context=[item.course_name,item.source_type?.replaceAll("_"," "),item.status].filter(Boolean).join(" · ");
+      review.append(node("h2",title),node("p",context,muted));
+      if(item.candidate_due_at)review.append(node("p",`Candidate deadline: ${new Date(item.candidate_due_at).toLocaleString()}`));
+      review.append(node("p",`${item.claim_type.replaceAll("_"," ")} · ${item.confidence} confidence · ${item.precision} precision`,muted),node("p",item.reason),node("small","Raw source content stays private. Review does not approve or change a deadline.",muted));
+      if(item.assignment_id){
+        const controls=node("div","","cal-toolbar");
+        const inspect=node("button","Review assignment",action),details=node("div","",muted);
+        inspect.type="button";
+        inspect.onclick=async()=>{inspect.disabled=true;try{const value=await get(`/api/v1/dashboard/assignments/${item.assignment_id}/evidence`);details.replaceChildren(node("p",value.resolution_explanation));for(const evidence of value.items)details.append(node("p",`${evidence.source_type.replaceAll("_"," ")} · ${evidence.disposition} · ${evidence.summary}`));}catch(error){details.textContent=error.message;}finally{inspect.disabled=false;}};
+        controls.append(inspect);review.append(controls,details);
+      }
+      root.append(review);
+    }
+  }
+  if(!value.items.length){if(!evidenceItems.length)root.append(node("p","Nothing needs review.",muted));return;}
+  root.append(node("h2","Learning proposals"));
   for(const item of value.items){const review=node("article","",card);review.append(node("h2",`${item.scope_type} · ${item.status}`),node("p",item.after),node("p",item.affected_future_behavior,muted));const controls=node("div","","cal-toolbar");const actions=item.status==="proposed"?["approve","reject","edit"]:["undo"];for(const actionName of actions){const button=node("button",actionName,actionName==="approve"?"confirm-btn confirm-btn-primary":action);button.onclick=async()=>{if(actionName==="edit"){const field=document.createElement("textarea");field.value=item.after;field.rows=4;const save=node("button","Save proposal","confirm-btn confirm-btn-primary");const form=node("form","",card);form.append(field,save);form.onsubmit=async event=>{event.preventDefault();await post(`/api/v1/dashboard/review/${item.id}`,{action:"edit",edited_text:field.value});renderReview(root);};review.append(form);return;}await post(`/api/v1/dashboard/review/${item.id}`,{action:actionName});renderReview(root);};controls.append(button);}review.append(controls);root.append(review);}
 }
 

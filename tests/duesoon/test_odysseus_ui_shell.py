@@ -151,6 +151,18 @@ def test_gmail_can_be_saved_as_read_only_document_evidence() -> None:
     assert "Raw bodies and signed download URLs are not exposed" in source
 
 
+def test_review_surfaces_sanitized_academic_evidence_without_approval_controls() -> None:
+    source = read("js/views/foundations.js")
+
+    assert "value.evidence_items" in source
+    assert "Academic evidence to review" in source
+    assert "candidate_due_at" in source
+    assert "Review assignment" in source
+    assert "Raw source content stays private" in source
+    assert "/api/v1/dashboard/assignments/" in source
+    assert "/confirm-deadline" not in source
+
+
 def test_frontend_runtime_remains_bounded_and_browser_secret_free() -> None:
     source = "\n".join(path.read_text(encoding="utf-8") for path in ROOT.glob("js/**/*.js"))
 
