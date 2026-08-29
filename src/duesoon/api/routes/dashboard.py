@@ -78,6 +78,11 @@ def briefing(request: Request):
     return request.app.state.briefing.snapshot()
 
 
+@router.get("/diagnostics")
+def diagnostics(request: Request):
+    return request.app.state.diagnostics.snapshot()
+
+
 @router.get("/calendar")
 def calendar(request: Request, start: date, end: date):
     try:

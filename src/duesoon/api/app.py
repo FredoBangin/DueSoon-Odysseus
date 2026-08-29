@@ -39,6 +39,7 @@ from src.duesoon.config.settings import DueSoonSettings, get_settings
 from src.duesoon.auth.service import AuthService
 from src.duesoon.dashboard.assistant import DeterministicAssistant
 from src.duesoon.dashboard.briefing import BriefingService
+from src.duesoon.diagnostics import DiagnosticsService
 from src.duesoon.google import GoogleEvidenceService, GoogleWorkspaceClient, GoogleWorkspaceConfig
 from src.duesoon.notifications.ntfy import NtfyPublishError, NtfyPublisher
 from src.duesoon.notifications.service import NotificationService
@@ -119,6 +120,7 @@ def create_app(
     )
     runtime_auth = AuthService(runtime_settings, runtime_sessions)
     runtime_briefing = BriefingService(runtime_settings, runtime_sessions)
+    runtime_diagnostics = DiagnosticsService(runtime_settings, runtime_sessions)
     runtime_evidence = EvidenceInspectionService(runtime_sessions)
     runtime_evidence_review = EvidenceReviewService(runtime_sessions)
     runtime_learning = LearningService(runtime_sessions)
@@ -188,6 +190,7 @@ def create_app(
     application.state.reminder_scheduler = runtime_scheduler
     application.state.auth = runtime_auth
     application.state.briefing = runtime_briefing
+    application.state.diagnostics = runtime_diagnostics
     application.state.evidence = runtime_evidence
     application.state.evidence_review = runtime_evidence_review
     application.state.assistant = runtime_assistant
