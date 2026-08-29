@@ -112,3 +112,4 @@ skills-lock.json
 .tools/
 .pytest-tmp/
 .pytest_cache/
+.worktrees/
