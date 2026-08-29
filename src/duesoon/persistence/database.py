@@ -78,29 +78,41 @@ def _apply_schema_migrations(engine: Engine) -> None:
             "version INTEGER PRIMARY KEY, applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)"
         ))
         applied = set(connection.execute(text("SELECT version FROM schema_migrations")).scalars())
-        if 1 in applied:
-            return
-        columns = {
-            row[1]
-            for row in connection.execute(text("PRAGMA table_info(reminder_events)"))
-        }
-        if "reminder_kind" not in columns:
+        if 1 not in applied:
+            columns = {
+                row[1]
+                for row in connection.execute(text("PRAGMA table_info(reminder_events)"))
+            }
+            if "reminder_kind" not in columns:
+                connection.execute(text(
+                    "ALTER TABLE reminder_events ADD COLUMN reminder_kind "
+                    "VARCHAR(30) NOT NULL DEFAULT 'standard'"
+                ))
+            if "interval_key" not in columns:
+                connection.execute(text(
+                    "ALTER TABLE reminder_events ADD COLUMN interval_key VARCHAR(50)"
+                ))
             connection.execute(text(
-                "ALTER TABLE reminder_events ADD COLUMN reminder_kind "
-                "VARCHAR(30) NOT NULL DEFAULT 'standard'"
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_reminder_adaptive_interval "
+                "ON reminder_events (assignment_id, deadline_at, reminder_kind, interval_key) "
+                "WHERE reminder_kind = 'adaptive'"
             ))
-        if "interval_key" not in columns:
-            connection.execute(text(
-                "ALTER TABLE reminder_events ADD COLUMN interval_key VARCHAR(50)"
-            ))
-        connection.execute(text(
-            "CREATE UNIQUE INDEX IF NOT EXISTS uq_reminder_adaptive_interval "
-            "ON reminder_events (assignment_id, deadline_at, reminder_kind, interval_key) "
-            "WHERE reminder_kind = 'adaptive'"
-        ))
-        connection.execute(
-            text("INSERT INTO schema_migrations(version) VALUES (1)")
-        )
+            connection.execute(
+                text("INSERT INTO schema_migrations(version) VALUES (1)")
+            )
+        if 2 not in applied:
+            columns = {
+                row[1]
+                for row in connection.execute(text("PRAGMA table_info(assistant_exchanges)"))
+            }
+            if "decision_trace" not in columns:
+                connection.execute(text(
+                    "ALTER TABLE assistant_exchanges ADD COLUMN decision_trace "
+                    "JSON NOT NULL DEFAULT '{}'"
+                ))
+            connection.execute(
+                text("INSERT INTO schema_migrations(version) VALUES (2)")
+            )
 
 
 def session_factory(engine: Engine) -> sessionmaker[Session]:

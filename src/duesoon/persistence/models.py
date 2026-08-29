@@ -364,6 +364,7 @@ class AssistantExchange(Base):
     model_name: Mapped[str | None] = mapped_column(String(255))
     confidence: Mapped[str] = mapped_column(String(30))
     evidence_links: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    decision_trace: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 

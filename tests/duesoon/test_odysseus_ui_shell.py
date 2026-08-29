@@ -163,6 +163,17 @@ def test_review_surfaces_sanitized_academic_evidence_without_approval_controls()
     assert "/confirm-deadline" not in source
 
 
+def test_assistant_shows_safe_decision_trace_without_hidden_reasoning() -> None:
+    source = read("js/views/assistant.js")
+
+    assert "value.decision_trace" in source
+    assert "How DueSoon answered" in source
+    assert "Sources consulted" in source
+    assert "Missing connections" in source
+    assert "Policy versions" in source
+    assert "chain-of-thought" not in source.casefold()
+
+
 def test_frontend_runtime_remains_bounded_and_browser_secret_free() -> None:
     source = "\n".join(path.read_text(encoding="utf-8") for path in ROOT.glob("js/**/*.js"))
 

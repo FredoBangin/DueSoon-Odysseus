@@ -31,6 +31,7 @@ from src.duesoon.assistant import (
     ModelSettingsService,
     OpenAICompatibleProvider,
 )
+from src.duesoon.assistant.retrieval import AssistantRetrievalService
 from src.duesoon.canvas.client import CanvasAPIError, CanvasClient
 from src.duesoon.canvas.academic_sync import CanvasAcademicSync
 from src.duesoon.canvas.content_sync import CanvasContentSyncService
@@ -126,13 +127,6 @@ def create_app(
     runtime_learning = LearningService(runtime_sessions)
     runtime_retained = RetainedToolsService(runtime_sessions)
     runtime_google_evidence = GoogleEvidenceService(runtime_sessions)
-    runtime_assistant = AssistantService(
-        runtime_sessions,
-        runtime_model_settings,
-        runtime_model_provider,
-        deterministic=DeterministicAssistant(),
-        learning=runtime_learning,
-    )
     owned_google_client: GoogleWorkspaceClient | None = None
     runtime_google = google_client
     if runtime_google is None:
@@ -140,6 +134,26 @@ def create_app(
         if google_config.enabled:
             owned_google_client = GoogleWorkspaceClient(google_config)
             runtime_google = owned_google_client
+    runtime_assistant = AssistantService(
+        runtime_sessions,
+        runtime_model_settings,
+        runtime_model_provider,
+        deterministic=DeterministicAssistant(),
+        learning=runtime_learning,
+        retrieval=AssistantRetrievalService(
+            runtime_sessions,
+            connections={
+                "gmail": bool(
+                    runtime_google is not None
+                    and runtime_google.config.gmail_enabled
+                ),
+                "google_calendar": bool(
+                    runtime_google is not None
+                    and runtime_google.config.calendar_enabled
+                ),
+            },
+        ),
+    )
     runtime_scheduler = reminder_scheduler
     if (
         runtime_scheduler is None

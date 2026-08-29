@@ -89,8 +89,46 @@ def test_schema_upgrade_adds_adaptive_reminder_audit_fields(tmp_path: Path) -> N
         engine.dispose()
 
     assert {"reminder_kind", "interval_key"} <= columns
-    assert versions == [1]
+    assert versions == [1, 2]
     assert "uq_reminder_adaptive_interval" in indexes
+
+
+def test_schema_upgrade_adds_assistant_decision_trace(tmp_path: Path) -> None:
+    settings = DueSoonSettings(
+        _env_file=None,
+        database_url=f"sqlite:///{(tmp_path / 'assistant-previous.db').as_posix()}",
+    )
+    engine = database.create_engine_from_settings(settings)
+    try:
+        with engine.begin() as connection:
+            connection.execute(text("""
+                CREATE TABLE assistant_exchanges (
+                    id INTEGER PRIMARY KEY,
+                    public_id VARCHAR(36) NOT NULL,
+                    question TEXT NOT NULL,
+                    answer TEXT NOT NULL,
+                    mode VARCHAR(30) NOT NULL,
+                    model_name VARCHAR(255),
+                    confidence VARCHAR(30) NOT NULL,
+                    evidence_links JSON NOT NULL DEFAULT '[]',
+                    created_at DATETIME NOT NULL
+                )
+            """))
+
+        database.create_schema(engine)
+        columns = {
+            item["name"]
+            for item in sqlalchemy_inspect(engine).get_columns("assistant_exchanges")
+        }
+        with engine.connect() as connection:
+            versions = connection.execute(
+                text("SELECT version FROM schema_migrations ORDER BY version")
+            ).scalars().all()
+    finally:
+        engine.dispose()
+
+    assert "decision_trace" in columns
+    assert versions == [1, 2]
 
 
 def test_new_persistence_layer_does_not_import_legacy_database() -> None:

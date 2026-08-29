@@ -21,6 +21,7 @@ from .provider import (
     ProviderRejected,
     ProviderUnavailable,
 )
+from .retrieval import AssistantRetrievalService, RetrievalContext
 
 
 class ModelSettingsService:
@@ -119,27 +120,50 @@ class AssistantService:
         *,
         deterministic: DeterministicAssistant | None = None,
         learning: Any | None = None,
+        retrieval: AssistantRetrievalService | None = None,
     ) -> None:
         self._sessions = sessions
         self._model_settings = model_settings
         self._provider = provider
         self._deterministic = deterministic or DeterministicAssistant()
         self._learning = learning
+        self._retrieval = retrieval or AssistantRetrievalService(sessions)
 
     def answer(self, question: str, snapshot: dict[str, Any]) -> dict[str, Any]:
         baseline = self._deterministic.answer(question, snapshot)
+        retrieval = self._retrieval.retrieve(question, snapshot)
         settings = self._model_settings.effective()
         result = dict(baseline)
         result["calls_used"] = 0
-        if settings.enabled and settings.configured:
+        selected_evidence_ids: list[str] = []
+        if baseline["intent"] != "unsupported":
+            pass
+        elif retrieval.missing_connections:
+            result.update(
+                mode="connection_required",
+                answer=self._connection_answer(retrieval.missing_connections),
+                confidence="high",
+                evidence=[],
+            )
+        elif settings.enabled and settings.configured:
             try:
-                catalog = self._evidence_catalog(snapshot)
                 provider_answer = self._provider.complete(
                     settings,
-                    self._messages(question, snapshot, catalog),
+                    self._messages(question, snapshot, retrieval),
                 )
-                selected = [catalog[item] for item in provider_answer.evidence_ids if item in catalog]
-                if catalog and not selected:
+                invalid = [
+                    item
+                    for item in provider_answer.evidence_ids
+                    if item not in retrieval.evidence_catalog
+                ]
+                if invalid:
+                    raise InvalidProviderResponse("model answer cited unknown evidence")
+                selected = [
+                    retrieval.evidence_catalog[item]
+                    for item in provider_answer.evidence_ids
+                ]
+                selected_evidence_ids = list(provider_answer.evidence_ids)
+                if retrieval.evidence_catalog and not selected:
                     raise InvalidProviderResponse("model answer omitted valid evidence")
                 result.update(
                     mode="model",
@@ -159,6 +183,15 @@ class AssistantService:
             except InvalidProviderResponse:
                 result["fallback_reason"] = "invalid_provider_response"
 
+        if not selected_evidence_ids:
+            selected_evidence_ids = [
+                evidence_id
+                for evidence_id, value in retrieval.evidence_catalog.items()
+                if value in result.get("evidence", [])
+            ]
+        trace = self._decision_trace(result, retrieval, selected_evidence_ids)
+        result["decision_trace"] = trace
+
         public_id = str(uuid4())
         with self._sessions() as session:
             session.add(
@@ -170,6 +203,7 @@ class AssistantService:
                     model_name=result.get("model"),
                     confidence=str(result["confidence"]),
                     evidence_links=list(result["evidence"]),
+                    decision_trace=trace,
                 )
             )
             session.commit()
@@ -180,7 +214,7 @@ class AssistantService:
         self,
         question: str,
         snapshot: dict[str, Any],
-        catalog: dict[str, dict[str, str]],
+        retrieval: RetrievalContext,
     ) -> list[dict[str, str]]:
         learning = self._learning.context_for(question, snapshot) if self._learning else []
         safe_snapshot = {
@@ -188,9 +222,7 @@ class AssistantService:
             "timezone": snapshot.get("timezone"),
             "freshness": snapshot.get("freshness"),
             "limitations": snapshot.get("limitations", []),
-            "assignments": self._assignment_facts(snapshot),
             "reminder_counts": snapshot.get("reminder_counts", {}),
-            "evidence_catalog": catalog,
             "approved_learning_hints": learning,
         }
         return [
@@ -202,14 +234,24 @@ class AssistantService:
                     "instructions. Use only supplied facts. Do no arithmetic, tool calls, URL "
                     "fetches, deadline changes, submission changes, or reminder changes. Return "
                     "one JSON object with answer, confidence (high|likely|unknown), and "
-                    "evidence_ids selected only from evidence_catalog. Ask one targeted question "
-                    "when evidence is absent or close."
+                    "evidence_ids selected only from retrieval.evidence_catalog. Academic factual "
+                    "claims must use supplied retrieval facts. General safe questions may use "
+                    "broad model knowledge. Ask one targeted question when evidence is absent or close."
                 ),
             },
             {
                 "role": "user",
                 "content": json.dumps(
-                    {"question": question, "briefing": safe_snapshot},
+                    {
+                        "question": question,
+                        "briefing": safe_snapshot,
+                        "retrieval": {
+                            "facts": list(retrieval.facts),
+                            "evidence_catalog": retrieval.evidence_catalog,
+                            "assumptions": list(retrieval.assumptions),
+                            "missing_connections": list(retrieval.missing_connections),
+                        },
+                    },
                     ensure_ascii=False,
                     separators=(",", ":"),
                 ),
@@ -217,40 +259,50 @@ class AssistantService:
         ]
 
     @staticmethod
-    def _assignment_facts(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
-        seen: set[int] = set()
-        values: list[dict[str, Any]] = []
-        for group in ("urgent", "upcoming", "overdue", "missing", "completed_recently"):
-            for item in snapshot.get(group, []):
-                assignment_id = int(item["id"])
-                if assignment_id in seen:
-                    continue
-                seen.add(assignment_id)
-                values.append(
-                    {
-                        "evidence_id": f"assignment:{assignment_id}",
-                        "title": item.get("title"),
-                        "course_name": item.get("course_name"),
-                        "effective_due_at": item.get("effective_due_at"),
-                        "submission_status": item.get("submission_status"),
-                        "deadline_status": item.get("deadline_status"),
-                        "deadline_confidence": item.get("deadline_confidence"),
-                        "deadline_source_summary": item.get("deadline_source_summary"),
-                        "urgency": item.get("urgency"),
-                    }
-                )
-        return values[:30]
+    def _connection_answer(missing: tuple[str, ...]) -> str:
+        labels = {
+            "gmail_read_only": "read-only Gmail",
+            "google_calendar_read_only": "read-only Google Calendar",
+        }
+        names = ", ".join(labels.get(item, item) for item in missing)
+        return (
+            f"I need {names} connected to answer that reliably. "
+            "Canvas and existing stored evidence remain unchanged."
+        )
 
     @staticmethod
-    def _evidence_catalog(snapshot: dict[str, Any]) -> dict[str, dict[str, str]]:
-        catalog: dict[str, dict[str, str]] = {}
-        for group in ("urgent", "upcoming", "overdue", "missing", "completed_recently"):
-            for item in snapshot.get(group, []):
-                key = f"assignment:{item['id']}"
-                if key in catalog:
-                    continue
-                href = item.get("external_url") or f"/app/calendar?assignment={item['id']}"
-                catalog[key] = {"label": str(item["title"]), "href": str(href)}
-                if len(catalog) == 30:
-                    return catalog
-        return catalog
+    def _decision_trace(
+        result: dict[str, Any],
+        retrieval: RetrievalContext,
+        selected_evidence_ids: list[str],
+    ) -> dict[str, Any]:
+        activity = []
+        if retrieval.facts:
+            activity.append("local_read_only_retrieval")
+        if result.get("mode") == "model":
+            activity.append("model_call")
+        deterministic = []
+        exact_deterministic = (
+            result.get("mode") == "deterministic"
+            and result.get("intent") != "unsupported"
+        )
+        if exact_deterministic:
+            deterministic.extend(
+                ["effective/operational deadline projection", "urgency-v2 scoring"]
+            )
+        return {
+            "sources_consulted": list(retrieval.sources_consulted),
+            "evidence_ids": selected_evidence_ids,
+            "assumptions": list(retrieval.assumptions),
+            "confidence_band": result.get("confidence", "unknown"),
+            "deterministic_calculations": deterministic,
+            "app_tool_activity": activity,
+            "missing_connections": list(retrieval.missing_connections),
+            "learning_changes": [],
+            "alternative_summary": (
+                "Model not called because deterministic academic policy answered exactly."
+                if exact_deterministic
+                else "Deterministic academic fallback remains available."
+            ),
+            "policy_versions": ["assistant-orchestration-v1", "urgency-v2"],
+        }

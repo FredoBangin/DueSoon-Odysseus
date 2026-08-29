@@ -1,6 +1,32 @@
 import {post} from "../api.js";
 import {node} from "./home.js";
 
+function attachDecisionTrace(body,value){
+  const trace=value.decision_trace;
+  if(!trace) return;
+  const details=document.createElement("details");
+  details.className="admin-card";
+  const summary=document.createElement("summary");
+  summary.textContent="How DueSoon answered";
+  details.append(summary);
+  const rows=[
+    ["Sources consulted",trace.sources_consulted],
+    ["Evidence used",trace.evidence_ids],
+    ["Assumptions",trace.assumptions],
+    ["Deterministic calculations",trace.deterministic_calculations],
+    ["Read-only activity",trace.app_tool_activity],
+    ["Missing connections",trace.missing_connections],
+    ["Learning changes",trace.learning_changes],
+    ["Policy versions",trace.policy_versions],
+  ];
+  for(const [label,items] of rows){
+    if(!items?.length) continue;
+    details.append(node("p",`${label}: ${items.join(" · ")}`,"admin-toggle-sub"));
+  }
+  if(trace.alternative_summary)details.append(node("p",trace.alternative_summary,"admin-toggle-sub"));
+  body.append(details);
+}
+
 function attachFeedback(reply,value){
   if(!value.answer_id) return;
   const controls=node("div","","cal-toolbar");
@@ -72,6 +98,7 @@ export function renderAssistant(root,initial=""){
         evidence.append(link);
       }
       body.append(evidence);
+      attachDecisionTrace(body,value);
       attachFeedback(reply,value);
       log.append(reply);
     }catch(error){
