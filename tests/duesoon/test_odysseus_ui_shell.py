@@ -110,6 +110,10 @@ def test_shell_runs_inherited_odysseus_background_and_theme_controls() -> None:
 def test_shell_uses_odysseus_sections_and_account_bar_for_all_due_soon_views() -> None:
     html = read("index.html")
 
+    assert 'id="sidebar-new-chat-btn"' not in html
+    assert html.count('class="section-collapse-btn"') == 2
+    assert 'aria-label="Collapse Academic"' in html
+    assert 'aria-label="Collapse Tools"' in html
     assert 'class="section" id="academic-section"' in html
     assert 'class="section" id="retained-tools-section"' in html
     assert 'id="sidebar-user-bar"' in html

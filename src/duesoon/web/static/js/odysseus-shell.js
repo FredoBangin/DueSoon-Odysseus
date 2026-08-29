@@ -31,12 +31,25 @@ window.closeDueSoonSidebar = () => {
 };
 
 document.querySelectorAll("[data-section-toggle]").forEach((button) => {
-  button.addEventListener("click", () => {
-    const section = document.getElementById(button.dataset.sectionToggle);
-    const expanded = button.getAttribute("aria-expanded") !== "false";
-    button.setAttribute("aria-expanded", String(!expanded));
-    section.hidden = expanded;
-  });
+  const section = document.getElementById(button.dataset.sectionToggle)?.closest(".section");
+  const items = document.getElementById(button.dataset.sectionToggle);
+  const collapse = section?.querySelector(".section-collapse-btn");
+  if (!section || !items) return;
+
+  const setExpanded = (expanded) => {
+    section.classList.toggle("collapsed", !expanded);
+    items.hidden = !expanded;
+    button.setAttribute("aria-expanded", String(expanded));
+    collapse?.setAttribute("aria-expanded", String(expanded));
+    collapse?.setAttribute("aria-label", `${expanded ? "Collapse" : "Expand"} ${button.textContent.trim()}`);
+  };
+  const toggle = (event) => {
+    event.stopPropagation();
+    setExpanded(section.classList.contains("collapsed"));
+  };
+
+  button.addEventListener("click", toggle);
+  collapse?.addEventListener("click", toggle);
 });
 
 const themeButton = document.querySelector("#tool-theme-btn");
