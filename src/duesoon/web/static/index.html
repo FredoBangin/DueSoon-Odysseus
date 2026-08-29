@@ -36,47 +36,47 @@
       <button class="sidebar-hamburger" id="sidebar-toggle-btn" type="button" title="Toggle sidebar" aria-label="Toggle sidebar">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
       </button>
-      <button class="sidebar-brand" id="sidebar-brand-btn" type="button" data-view="home" title="DueSoon home"><span class="sidebar-brand-title">DueSoon</span></button>
+      <div class="sidebar-brand" id="sidebar-brand-btn" data-view="home" role="button" tabindex="0" title="DueSoon home"><span class="sidebar-brand-title">DueSoon</span></div>
     </div>
 
     <div class="sidebar-inner">
-      <button class="list-item active" id="sidebar-new-chat-btn" type="button" data-view="assistant" title="Ask DueSoon">
+      <div class="list-item active" id="sidebar-new-chat-btn" data-view="assistant" role="button" tabindex="0" title="Ask DueSoon">
         <svg class="sidebar-action-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         <span class="grow">Ask DueSoon</span>
-      </button>
+      </div>
 
       <div class="section" id="academic-section">
         <div class="section-header-flex"><button class="section-title" type="button" data-section-toggle="academic-items" aria-expanded="true"><span class="section-title-label">Academic</span></button></div>
         <div id="academic-items" class="section-items">
-          <button class="list-item" type="button" data-view="home"><span class="grow">Home</span></button>
-          <button class="list-item" type="button" data-view="assistant"><span class="grow">Assistant</span></button>
-          <button class="list-item" type="button" data-view="calendar"><span class="grow">Calendar</span></button>
-          <button class="list-item" type="button" data-view="email"><span class="grow">Email</span></button>
-          <button class="list-item" type="button" data-view="notifications"><span class="grow">Notifications</span></button>
-          <button class="list-item" type="button" data-view="review"><span class="grow">Review</span></button>
+          <div class="list-item" data-view="home" role="button" tabindex="0"><span class="grow">Home</span></div>
+          <div class="list-item" data-view="assistant" role="button" tabindex="0"><span class="grow">Assistant</span></div>
+          <div class="list-item" data-view="calendar" role="button" tabindex="0"><span class="grow">Calendar</span></div>
+          <div class="list-item" data-view="email" role="button" tabindex="0"><span class="grow">Email</span></div>
+          <div class="list-item" data-view="notifications" role="button" tabindex="0"><span class="grow">Notifications</span></div>
+          <div class="list-item" data-view="review" role="button" tabindex="0"><span class="grow">Review</span></div>
         </div>
       </div>
 
       <div class="section" id="retained-tools-section">
         <div class="section-header-flex"><button class="section-title" type="button" data-section-toggle="retained-items" aria-expanded="true"><span class="section-title-label">Tools</span></button></div>
         <div id="retained-items" class="section-items">
-          <button class="list-item" type="button" data-view="memory"><span class="grow">Memory</span></button>
-          <button class="list-item" type="button" data-view="documents"><span class="grow">Documents</span></button>
-          <button class="list-item" type="button" data-view="notes"><span class="grow">Notes</span></button>
-          <button class="list-item" type="button" data-view="settings"><span class="grow">Settings</span></button>
+          <div class="list-item" data-view="memory" role="button" tabindex="0"><span class="grow">Memory</span></div>
+          <div class="list-item" data-view="documents" role="button" tabindex="0"><span class="grow">Documents</span></div>
+          <div class="list-item" data-view="notes" role="button" tabindex="0"><span class="grow">Notes</span></div>
+          <div class="list-item" data-view="settings" role="button" tabindex="0"><span class="grow">Settings</span></div>
           <div class="submenu-wrap">
-            <button class="list-item" id="tool-theme-btn" type="button" aria-expanded="false" aria-controls="theme-submenu"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a7 7 0 0 0 0 20 4 4 0 0 1 0-8 4 4 0 0 0 0-8"/><circle cx="8" cy="9" r="1.5" fill="currentColor"/><circle cx="15" cy="14" r="1.5" fill="currentColor"/></svg><span class="grow">Theme</span><svg class="submenu-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg></button>
+            <div class="list-item" id="tool-theme-btn" role="button" tabindex="0" aria-expanded="false" aria-controls="theme-submenu"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a7 7 0 0 0 0 20 4 4 0 0 1 0-8 4 4 0 0 0-8"/><circle cx="8" cy="9" r="1.5" fill="currentColor"/><circle cx="15" cy="14" r="1.5" fill="currentColor"/></svg><span class="grow">Theme</span><svg class="submenu-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg></div>
             <div class="dropdown theme-submenu" id="theme-submenu" hidden>
-              <button class="dropdown-item" type="button" data-theme="dark">Dark</button>
-              <button class="dropdown-item" type="button" data-theme="midnight">Midnight</button>
-              <button class="dropdown-item" type="button" data-theme="ocean">Ocean</button>
-              <button class="dropdown-item" type="button" data-theme="forest">Forest</button>
-              <button class="dropdown-item" type="button" data-theme="ume">Ume</button>
+              <div class="dropdown-item" role="menuitem" tabindex="0" data-theme="dark">Dark</div>
+              <div class="dropdown-item" role="menuitem" tabindex="0" data-theme="midnight">Midnight</div>
+              <div class="dropdown-item" role="menuitem" tabindex="0" data-theme="ocean">Ocean</div>
+              <div class="dropdown-item" role="menuitem" tabindex="0" data-theme="forest">Forest</div>
+              <div class="dropdown-item" role="menuitem" tabindex="0" data-theme="ume">Ume</div>
               <div class="sort-dropdown-sep"></div>
-              <button class="dropdown-item" type="button" data-bg-pattern="constellations">Constellations</button>
-              <button class="dropdown-item" type="button" data-bg-pattern="rain">Rain</button>
-              <button class="dropdown-item" type="button" data-bg-pattern="perlin-flow">Flow</button>
-              <button class="dropdown-item" type="button" data-bg-pattern="none">No animation</button>
+              <div class="dropdown-item" role="menuitem" tabindex="0" data-bg-pattern="constellations">Constellations</div>
+              <div class="dropdown-item" role="menuitem" tabindex="0" data-bg-pattern="rain">Rain</div>
+              <div class="dropdown-item" role="menuitem" tabindex="0" data-bg-pattern="perlin-flow">Flow</div>
+              <div class="dropdown-item" role="menuitem" tabindex="0" data-bg-pattern="none">No animation</div>
             </div>
           </div>
         </div>
@@ -84,9 +84,9 @@
     </div>
 
     <div class="sidebar-user-bar" id="sidebar-user-bar">
-      <button class="user-bar-left" id="user-bar-profile" type="button" data-view="settings" title="Account settings">
+      <div class="user-bar-left" id="user-bar-profile" data-view="settings" role="button" tabindex="0" title="Account settings">
         <span class="user-bar-avatar" id="user-bar-avatar">D</span><span class="user-bar-name" id="user-bar-name">DueSoon owner</span>
-      </button>
+      </div>
       <div class="user-bar-actions">
         <button type="button" class="user-bar-btn" id="user-bar-settings" data-view="settings" title="Settings" aria-label="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
         <button type="button" class="user-bar-btn logout" id="logout" title="Sign out" aria-label="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/></svg></button>

@@ -38,6 +38,10 @@ async function show(view,question=""){
 await bootstrapSession();
 document.querySelectorAll("[data-view]").forEach(button=>
   button.addEventListener("click",()=>show(button.dataset.view)));
+document.querySelectorAll('[data-view][role="button"]').forEach(button=>
+  button.addEventListener("keydown",event=>{
+    if(event.key==="Enter"||event.key===" "){event.preventDefault();button.click();}
+  }));
 document.querySelector("#logout").addEventListener("click",async()=>{
   await post("/api/v1/auth/logout",{});
   location.replace("/login");

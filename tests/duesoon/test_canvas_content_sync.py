@@ -80,3 +80,29 @@ def test_content_sync_is_append_only_and_idempotent(tmp_path: Path) -> None:
         assert conversation is not None
         assert conversation.course_id is not None
         assert conversation.raw_payload["messages"][0]["body"] == "Due Friday"
+
+
+def test_conversation_course_matching_accepts_direct_canvas_context() -> None:
+    course = Course(id=7, canvas_course_id="42", name="Biology", active=True)
+    courses = {course.canvas_course_id: course}
+
+    assert CanvasContentSyncService._conversation_course_id(
+        {"context_code": "course_42"}, courses
+    ) == 7
+    assert CanvasContentSyncService._conversation_course_id(
+        {"course_id": 42}, courses
+    ) == 7
+    assert CanvasContentSyncService._conversation_course_id(
+        {"course_ids": ["42"]}, courses
+    ) == 7
+
+
+def test_conversation_course_matching_stays_unresolved_for_multiple_courses() -> None:
+    courses = {
+        "42": Course(id=7, canvas_course_id="42", name="Biology", active=True),
+        "43": Course(id=8, canvas_course_id="43", name="Chemistry", active=True),
+    }
+
+    assert CanvasContentSyncService._conversation_course_id(
+        {"course_ids": ["42", "43"]}, courses
+    ) is None

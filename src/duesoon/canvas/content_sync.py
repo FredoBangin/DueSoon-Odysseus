@@ -201,14 +201,37 @@ class CanvasContentSyncService:
     def _conversation_course_id(
         cls, payload: dict[str, Any], course_by_canvas_id: dict[str, Course]
     ) -> int | None:
+        candidates: set[str] = set()
+
+        def add_context(value: Any) -> None:
+            if isinstance(value, str) and value.startswith("course_"):
+                candidates.add(value.removeprefix("course_"))
+
+        add_context(payload.get("context_code"))
+        add_context(payload.get("course_context"))
+        direct_course = payload.get("course_id")
+        if isinstance(direct_course, (str, int)):
+            candidates.add(str(direct_course))
+        course_ids = payload.get("course_ids")
+        if isinstance(course_ids, (list, tuple, set)):
+            candidates.update(str(value) for value in course_ids if isinstance(value, (str, int)))
+
         contexts = payload.get("audience_contexts")
-        if not isinstance(contexts, dict):
+        if isinstance(contexts, dict):
+            courses = contexts.get("courses")
+            if isinstance(courses, dict):
+                candidates.update(str(value) for value in courses if isinstance(value, (str, int)))
+
+        messages = payload.get("messages")
+        if isinstance(messages, list):
+            for message in messages:
+                if isinstance(message, dict):
+                    add_context(message.get("context_code"))
+
+        known = {value for value in candidates if value in course_by_canvas_id}
+        if len(known) != 1:
             return None
-        courses = contexts.get("courses")
-        if not isinstance(courses, dict) or len(courses) != 1:
-            return None
-        course = course_by_canvas_id.get(str(next(iter(courses))))
-        return course.id if course else None
+        return course_by_canvas_id[next(iter(known))].id
 
     @staticmethod
     def _store(
