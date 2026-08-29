@@ -75,7 +75,29 @@ export async function renderReview(root){
   }
   if(!value.items.length){if(!evidenceItems.length)root.append(node("p","Nothing needs review.",muted));return;}
   root.append(node("h2","Learning proposals"));
-  for(const item of value.items){const review=node("article","",card);review.append(node("h2",`${item.scope_type} · ${item.status}`),node("p",item.after),node("p",item.affected_future_behavior,muted));const controls=node("div","","cal-toolbar");const actions=item.status==="proposed"?["approve","reject","edit"]:["undo"];for(const actionName of actions){const button=node("button",actionName,actionName==="approve"?"confirm-btn confirm-btn-primary":action);button.onclick=async()=>{if(actionName==="edit"){const field=document.createElement("textarea");field.value=item.after;field.rows=4;const save=node("button","Save proposal","confirm-btn confirm-btn-primary");const form=node("form","",card);form.append(field,save);form.onsubmit=async event=>{event.preventDefault();await post(`/api/v1/dashboard/review/${item.id}`,{action:"edit",edited_text:field.value});renderReview(root);};review.append(form);return;}await post(`/api/v1/dashboard/review/${item.id}`,{action:actionName});renderReview(root);};controls.append(button);}review.append(controls);root.append(review);}
+  for(const item of value.items){
+    const review=node("article","",card);
+    review.append(node("h2",`${item.scope_type} · ${item.status}`),node("p",item.after),node("p",item.affected_future_behavior,muted));
+    review.append(node("small",`Created by ${item.created_by||"owner"} · revision ${item.revision}`,muted));
+    if(item.audit?.length)review.append(node("p",`Audit: ${item.audit.map(event=>event.action).join(" → ")}`,muted));
+    const controls=node("div","","cal-toolbar");
+    const actions=item.status==="proposed"?["approve","reject","edit"]:["approved","rejected"].includes(item.status)?["undo"]:[];
+    for(const actionName of actions){
+      const button=node("button",actionName,actionName==="approve"?"confirm-btn confirm-btn-primary":action);
+      button.onclick=async()=>{
+        if(actionName==="edit"){
+          const field=document.createElement("textarea");field.value=item.after;field.rows=4;
+          const save=node("button","Save proposal","confirm-btn confirm-btn-primary");
+          const form=node("form","",card);form.append(field,save);
+          form.onsubmit=async event=>{event.preventDefault();await post(`/api/v1/dashboard/review/${item.id}`,{action:"edit",edited_text:field.value});renderReview(root);};
+          review.append(form);return;
+        }
+        await post(`/api/v1/dashboard/review/${item.id}`,{action:actionName});renderReview(root);
+      };
+      controls.append(button);
+    }
+    review.append(controls);root.append(review);
+  }
 }
 
 export async function renderSettings(root){

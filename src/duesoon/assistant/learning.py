@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import re
 from typing import Any
 from uuid import uuid4
 
@@ -20,6 +21,20 @@ from src.duesoon.persistence.models import (
 
 ALLOWED_SCOPES = {"assignment", "course", "sender", "global"}
 ALLOWED_ACTIONS = {"approve", "reject", "undo"}
+
+
+def _normalized(value: str) -> str:
+    return re.sub(r"\s+", " ", value.strip().casefold())
+
+
+def _behavior_type(correction: str) -> str:
+    text = _normalized(correction)
+    explicit_format = (
+        ("answer" in text and any(word in text for word in ("shorter", "concise", "format", "bullet")))
+        or "use bullet" in text
+        or "be concise" in text
+    )
+    return "answer_format_preference" if explicit_format else "assistant_explanation"
 
 
 class LearningService:
@@ -69,30 +84,78 @@ class LearningService:
 
             proposal = None
             if verdict != "correct" and what_was_wrong:
+                clean = what_was_wrong.strip()
+                behavior_type = _behavior_type(clean)
                 proposal = session.scalar(
                     select(LearningProposal).where(
                         LearningProposal.feedback_id == feedback.id
                     )
                 )
                 if proposal is None:
-                    proposal = LearningProposal(
-                        public_id=str(uuid4()),
-                        feedback_id=feedback.id,
-                        behavior_type="assistant_explanation",
-                        scope_type=scope_type,
-                        scope_ref=scope_ref,
-                        before_text=exchange.answer,
-                        after_text=what_was_wrong.strip(),
-                        explanation="Owner correction proposed for future assistant explanations.",
-                        source_refs=[f"assistant:{answer_id}"],
-                        affected_future_behavior=(
-                            "May guide future explanations and matching suggestions only. "
-                            "Cannot alter deadlines, submissions, urgency, or reminders."
+                    candidates = session.scalars(
+                        select(LearningProposal).where(
+                            LearningProposal.behavior_type == behavior_type,
+                            LearningProposal.scope_type == scope_type,
+                            LearningProposal.scope_ref == scope_ref,
+                        )
+                    ).all()
+                    proposal = next(
+                        (
+                            item
+                            for item in candidates
+                            if _normalized(item.after_text) == _normalized(clean)
                         ),
+                        None,
                     )
-                    session.add(proposal)
-                    session.flush()
-                    self._audit(session, proposal, "propose", None)
+                    if proposal is not None:
+                        reference = f"assistant:{answer_id}"
+                        if reference not in proposal.source_refs:
+                            before = self._serialize(proposal)
+                            proposal.source_refs = [*proposal.source_refs, reference]
+                            session.flush()
+                            self._audit(session, proposal, "corroborate", before)
+                    else:
+                        automatic = behavior_type == "answer_format_preference"
+                        proposal = LearningProposal(
+                            public_id=str(uuid4()),
+                            feedback_id=feedback.id,
+                            behavior_type=behavior_type,
+                            scope_type=scope_type,
+                            scope_ref=scope_ref,
+                            before_text=exchange.answer,
+                            after_text=clean,
+                            explanation=(
+                                "Explicit owner formatting preference applied automatically."
+                                if automatic
+                                else "Owner correction proposed for future assistant explanations."
+                            ),
+                            source_refs=[f"assistant:{answer_id}"],
+                            affected_future_behavior=(
+                                "May change answer length and formatting only. Cannot alter facts, "
+                                "deadlines, submissions, urgency, or reminders."
+                                if automatic
+                                else "May guide future explanations and matching suggestions only. "
+                                "Cannot alter deadlines, submissions, urgency, or reminders."
+                            ),
+                            created_by=(
+                                "automatic_low_risk" if automatic else "owner"
+                            ),
+                        )
+                        session.add(proposal)
+                        session.flush()
+                        self._audit(session, proposal, "propose", None)
+                        if automatic:
+                            before = self._serialize(proposal)
+                            proposal.status = "approved"
+                            proposal.approved_at = datetime.now(UTC)
+                            session.flush()
+                            self._audit(
+                                session,
+                                proposal,
+                                "auto_approve",
+                                before,
+                                actor="automatic_low_risk",
+                            )
             session.commit()
             return {
                 "feedback_id": feedback.public_id,
@@ -101,7 +164,9 @@ class LearningService:
                     "What was wrong, and what should DueSoon understand next time?"
                     if feedback.correction_prompted else None
                 ),
-                "proposal": self._serialize(proposal) if proposal else None,
+                "proposal": (
+                    self._serialize_with_audit(session, proposal) if proposal else None
+                ),
             }
 
     def list_proposals(self) -> list[dict[str, Any]]:
@@ -111,7 +176,7 @@ class LearningService:
                     LearningProposal.updated_at.desc(), LearningProposal.id.desc()
                 )
             ).all()
-            return [self._serialize(value) for value in values]
+            return [self._serialize_with_audit(session, value) for value in values]
 
     def act(
         self,
@@ -162,7 +227,7 @@ class LearningService:
                     reason=reason,
                 ))
             session.commit()
-            return self._serialize(proposal)
+            return self._serialize_with_audit(session, proposal)
 
     def context_for(
         self, _question: str, _snapshot: dict[str, Any]
@@ -189,6 +254,8 @@ class LearningService:
         proposal: LearningProposal,
         action: str,
         before: dict[str, Any] | None,
+        *,
+        actor: str = "owner",
     ) -> LearningAuditEvent:
         event = LearningAuditEvent(
             proposal_id=proposal.id,
@@ -196,6 +263,7 @@ class LearningService:
             before_state=before,
             after_state=LearningService._serialize(proposal),
             revision=proposal.revision,
+            actor=actor,
         )
         session.add(event)
         session.flush()
@@ -217,6 +285,30 @@ class LearningService:
             "affected_future_behavior": proposal.affected_future_behavior,
             "status": proposal.status,
             "revision": proposal.revision,
+            "created_by": proposal.created_by,
             "created_at": proposal.created_at.isoformat() if proposal.created_at else None,
             "updated_at": proposal.updated_at.isoformat() if proposal.updated_at else None,
         }
+
+    @staticmethod
+    def _serialize_with_audit(
+        session: Session, proposal: LearningProposal
+    ) -> dict[str, Any]:
+        value = LearningService._serialize(proposal)
+        assert value is not None
+        events = session.scalars(
+            select(LearningAuditEvent)
+            .where(LearningAuditEvent.proposal_id == proposal.id)
+            .order_by(LearningAuditEvent.id)
+        ).all()
+        value["audit"] = [
+            {
+                "action": item.action,
+                "revision": item.revision,
+                "actor": item.actor,
+                "created_at": item.created_at.isoformat() if item.created_at else None,
+            }
+            for item in events
+        ]
+        value["reversible"] = proposal.status in {"approved", "rejected"}
+        return value

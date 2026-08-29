@@ -161,6 +161,9 @@ def test_review_surfaces_sanitized_academic_evidence_without_approval_controls()
     assert "Raw source content stays private" in source
     assert "/api/v1/dashboard/assignments/" in source
     assert "/confirm-deadline" not in source
+    assert "item.created_by" in source
+    assert "item.audit" in source
+    assert '["approved","rejected"].includes(item.status)' in source
 
 
 def test_assistant_shows_safe_decision_trace_without_hidden_reasoning() -> None:

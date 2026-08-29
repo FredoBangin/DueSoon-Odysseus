@@ -8,11 +8,18 @@ from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
 from src.duesoon.api.app import create_app
+from src.duesoon.assistant.learning import LearningService
 from src.duesoon.auth.passwords import hash_password
 from src.duesoon.assistant.config import EffectiveModelSettings
 from src.duesoon.assistant.provider import OpenAICompatibleProvider
 from src.duesoon.config.settings import DueSoonSettings
-from src.duesoon.persistence.database import create_engine_from_settings
+from src.duesoon.persistence.database import (
+    create_engine_from_settings,
+    create_schema,
+    session_factory,
+)
+from src.duesoon.persistence.models import AssistantExchange, LearningProposal
+from sqlalchemy import func, select
 
 
 def test_model_router_uses_backup_only_after_transient_failure() -> None:
@@ -154,3 +161,93 @@ def test_feedback_requires_explanation_and_review_is_reversible(tmp_path: Path) 
             json={"action": "undo", "reason": "Wrong scope"},
         )
         assert reverted.json()["status"] == "reverted"
+
+
+def learning_service(tmp_path: Path):
+    settings = DueSoonSettings(
+        _env_file=None,
+        environment="test",
+        database_url=f"sqlite:///{(tmp_path / 'learning-service.db').as_posix()}",
+    )
+    engine = create_engine_from_settings(settings)
+    create_schema(engine)
+    sessions = session_factory(engine)
+    with sessions() as session:
+        session.add_all(
+            [
+                AssistantExchange(
+                    public_id="answer-1",
+                    question="Any updates?",
+                    answer="Long answer",
+                    mode="deterministic",
+                    confidence="high",
+                    evidence_links=[],
+                    decision_trace={},
+                ),
+                AssistantExchange(
+                    public_id="answer-2",
+                    question="Any updates now?",
+                    answer="Another answer",
+                    mode="deterministic",
+                    confidence="high",
+                    evidence_links=[],
+                    decision_trace={},
+                ),
+            ]
+        )
+        session.commit()
+    return engine, sessions, LearningService(sessions)
+
+
+def test_explicit_answer_format_preference_auto_applies_but_remains_reversible(
+    tmp_path: Path,
+) -> None:
+    engine, _sessions, service = learning_service(tmp_path)
+    try:
+        result = service.submit_feedback(
+            "answer-1",
+            verdict="incorrect",
+            what_was_wrong="Keep future answers shorter and use bullet points.",
+        )
+
+        proposal = result["proposal"]
+        assert proposal["behavior_type"] == "answer_format_preference"
+        assert proposal["status"] == "approved"
+        assert proposal["created_by"] == "automatic_low_risk"
+        assert [item["action"] for item in proposal["audit"]] == [
+            "propose",
+            "auto_approve",
+        ]
+        assert proposal["reversible"] is True
+        reverted = service.act(proposal["id"], action="undo", reason="Not useful")
+        assert reverted["status"] == "reverted"
+    finally:
+        engine.dispose()
+
+
+def test_repeated_identical_correction_corroborates_one_proposal_without_oscillation(
+    tmp_path: Path,
+) -> None:
+    engine, sessions, service = learning_service(tmp_path)
+    try:
+        first = service.submit_feedback(
+            "answer-1",
+            verdict="incorrect",
+            what_was_wrong="State when Canvas was last synchronized.",
+        )["proposal"]
+        second = service.submit_feedback(
+            "answer-2",
+            verdict="incorrect",
+            what_was_wrong="State when Canvas was last synchronized.",
+        )["proposal"]
+
+        assert first["id"] == second["id"]
+        assert second["source_refs"] == ["assistant:answer-1", "assistant:answer-2"]
+        assert [item["action"] for item in second["audit"]] == [
+            "propose",
+            "corroborate",
+        ]
+        with sessions() as session:
+            assert session.scalar(select(func.count()).select_from(LearningProposal)) == 1
+    finally:
+        engine.dispose()
