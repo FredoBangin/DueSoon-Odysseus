@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,interactive-widget=resizes-content,viewport-fit=cover">
+  <meta name="theme-color" content="#282c34">
+  <meta name="format-detection" content="telephone=no,date=no,address=no,email=no">
+  <title>DueSoon</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/assets/css/app.css">
+</head>
+<body class="bg-pattern-constellations">
+  <div id="mobile-backdrop"></div>
+  <button class="hamburger-btn" id="hamburger-btn" type="button" title="Show sidebar" aria-label="Show sidebar" aria-expanded="true">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </button>
+
+  <div class="icon-rail" id="icon-rail" aria-label="Compact navigation">
+    <div class="rail-resize-handle" id="rail-resize-handle"></div>
+    <button class="icon-rail-btn" type="button" data-view="home" title="Home"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M9 16l2 2 4-4"/></svg></button>
+    <button class="icon-rail-btn" type="button" data-view="assistant" title="Assistant"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></button>
+    <div class="rail-separator"></div>
+    <button class="icon-rail-btn" type="button" data-view="calendar" title="Calendar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button>
+    <button class="icon-rail-btn" type="button" data-view="email" title="Email"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg></button>
+    <button class="icon-rail-btn" type="button" data-view="notifications" title="Notifications"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg></button>
+    <button class="icon-rail-btn" type="button" data-view="notes" title="Notes"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h10l4 4v14H5z"/><path d="M15 3v5h5"/><path d="M8 17.5 15.5 10l2.5 2.5L10.5 20H8z"/></svg></button>
+    <button class="icon-rail-btn" type="button" data-view="memory" title="Brain"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/></svg></button>
+    <button class="icon-rail-btn" type="button" data-view="documents" title="Documents"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg></button>
+    <div style="flex:1"></div>
+    <button class="icon-rail-btn" type="button" data-view="settings" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+  </div>
+
+  <nav class="sidebar" id="sidebar" aria-label="DueSoon navigation">
+    <div class="sidebar-resize-handle" id="sidebar-resize-handle"></div>
+    <div class="sidebar-header">
+      <button class="sidebar-hamburger" id="sidebar-toggle-btn" type="button" title="Toggle sidebar" aria-label="Toggle sidebar">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <div class="sidebar-brand" id="sidebar-brand-btn" data-view="home" role="button" tabindex="0" title="DueSoon home"><span class="sidebar-brand-title">DueSoon</span></div>
+    </div>
+
+    <div class="sidebar-inner">
+      <div class="section" id="academic-section">
+        <div class="section-header-flex"><button class="section-title" type="button" data-section-toggle="academic-items" aria-expanded="true"><span class="section-title-label">Academic</span></button><button type="button" class="section-collapse-btn" aria-label="Collapse Academic" aria-expanded="true"><svg class="section-collapse-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button></div>
+        <div id="academic-items" class="section-items">
+          <div class="list-item" data-view="home" role="button" tabindex="0"><span class="grow">Home</span></div>
+          <div class="list-item" data-view="assistant" role="button" tabindex="0"><span class="grow">Assistant</span></div>
+          <div class="list-item" data-view="calendar" role="button" tabindex="0"><span class="grow">Calendar</span></div>
+          <div class="list-item" data-view="email" role="button" tabindex="0"><span class="grow">Email</span></div>
+          <div class="list-item" data-view="notifications" role="button" tabindex="0"><span class="grow">Notifications</span></div>
+          <div class="list-item" data-view="review" role="button" tabindex="0"><span class="grow">Review</span></div>
+        </div>
+      </div>
+
+      <div class="section" id="retained-tools-section">
+        <div class="section-header-flex"><button class="section-title" type="button" data-section-toggle="retained-items" aria-expanded="true"><span class="section-title-label">Tools</span></button><button type="button" class="section-collapse-btn" aria-label="Collapse Tools" aria-expanded="true"><svg class="section-collapse-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button></div>
+        <div id="retained-items" class="section-items">
+          <div class="list-item" data-view="memory" role="button" tabindex="0"><span class="grow">Memory</span></div>
+          <div class="list-item" data-view="documents" role="button" tabindex="0"><span class="grow">Documents</span></div>
+          <div class="list-item" data-view="notes" role="button" tabindex="0"><span class="grow">Notes</span></div>
+          <div class="list-item" data-view="settings" role="button" tabindex="0"><span class="grow">Settings</span></div>
+          <div class="submenu-wrap">
+            <div class="list-item" id="tool-theme-btn" role="button" tabindex="0" aria-expanded="false" aria-controls="theme-submenu"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a7 7 0 0 0 0 20 4 4 0 0 1 0-8 4 4 0 0 0-8"/><circle cx="8" cy="9" r="1.5" fill="currentColor"/><circle cx="15" cy="14" r="1.5" fill="currentColor"/></svg><span class="grow">Theme</span><svg class="submenu-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg></div>
+            <div class="dropdown theme-submenu" id="theme-submenu" hidden>
+              <div class="dropdown-item" role="menuitem" tabindex="0" data-theme="dark">Dark</div>
+              <div class="dropdown-item" role="menuitem" tabindex="0" data-theme="midnight">Midnight</div>
+              <div class="dropdown-item" role="menuitem" tabindex="0" data-theme="ocean">Ocean</div>
+              <div class="dropdown-item" role="menuitem" tabindex="0" data-theme="forest">Forest</div>
+              <div class="dropdown-item" role="menuitem" tabindex="0" data-theme="ume">Ume</div>
+              <div class="sort-dropdown-sep"></div>
+              <div class="dropdown-item" role="menuitem" tabindex="0" data-bg-pattern="constellations">Constellations</div>
+              <div class="dropdown-item" role="menuitem" tabindex="0" data-bg-pattern="rain">Rain</div>
+              <div class="dropdown-item" role="menuitem" tabindex="0" data-bg-pattern="perlin-flow">Flow</div>
+              <div class="dropdown-item" role="menuitem" tabindex="0" data-bg-pattern="none">No animation</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-user-bar" id="sidebar-user-bar">
+      <div class="user-bar-left" id="user-bar-profile" data-view="settings" role="button" tabindex="0" title="Account settings">
+        <span class="user-bar-avatar" id="user-bar-avatar">D</span><span class="user-bar-name" id="user-bar-name">DueSoon owner</span>
+      </div>
+      <div class="user-bar-actions">
+        <button type="button" class="user-bar-btn" id="user-bar-settings" data-view="settings" title="Settings" aria-label="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+        <button type="button" class="user-bar-btn logout" id="logout" title="Sign out" aria-label="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/></svg></button>
+      </div>
+    </div>
+  </nav>
+
+  <main class="chat-container welcome-active duesoon-workspace" id="chat-container" aria-label="DueSoon workspace">
+    <h1 class="a11y-visually-hidden">DueSoon</h1>
+    <div class="chat-top-bar"><div class="chat-meta-overlay"><span id="page-title">Home</span></div></div>
+    <section id="content" class="workspace-content" aria-live="polite"></section>
+  </main>
+
+  <script type="module" src="/assets/js/odysseus-shell.js"></script>
+  <script type="module" src="/assets/js/app.js"></script>
+</body>
+</html>

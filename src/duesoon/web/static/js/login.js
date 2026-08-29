@@ -1,2 +1,6 @@
+import {startConstellations} from "./background.js";
+
+startConstellations();
+
 const form=document.querySelector("#login-form"),error=document.querySelector("#login-error"),password=document.querySelector("#password");
 form.addEventListener("submit",async event=>{event.preventDefault();error.textContent="";const body={username:document.querySelector("#username").value,password:password.value};password.value="";try{const response=await fetch("/api/v1/auth/login",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});if(!response.ok)throw new Error();location.replace("/app")}catch{error.textContent="Unable to sign in. Check your credentials and try again."}});

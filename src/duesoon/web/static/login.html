@@ -2,35 +2,26 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,interactive-widget=resizes-content,viewport-fit=cover">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#282c34">
-  <meta name="format-detection" content="telephone=no,date=no,address=no,email=no">
   <title>Sign in · DueSoon</title>
   <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/assets/css/app.css">
 </head>
-<body class="bg-pattern-constellations">
-  <main class="modal">
-    <section class="modal-content">
-      <div class="modal-header">
-        <h4><span class="red-text">DueSoon</span></h4>
-      </div>
-      <div class="modal-body">
-        <div class="admin-card">
-          <h2>Private academic workspace</h2>
-          <p class="admin-toggle-sub">Sign in to view your DueSoon dashboard, built on Odysseus.</p>
-          <form id="login-form" class="assistant-settings-form">
-            <label for="username">Username</label>
-            <input id="username" autocomplete="username" required maxlength="100">
-            <label for="password">Password</label>
-            <input id="password" type="password" autocomplete="current-password" required maxlength="1024">
-            <button type="submit" class="confirm-btn confirm-btn-primary">Sign in</button>
-            <p id="login-error" class="admin-toggle-sub" role="alert"></p>
-          </form>
-        </div>
-      </div>
+<body class="login-page bg-pattern-constellations">
+  <main class="login-shell">
+    <div class="login-brand"><span>DueSoon</span><small>Built on the Odysseus interface</small></div>
+    <section class="login-card">
+      <p class="eyebrow">Private academic workspace</p>
+      <h1>Welcome back</h1>
+      <p class="muted">Sign in to view your current Canvas briefing and reminders.</p>
+      <form id="login-form">
+        <label for="username">Username</label><input id="username" autocomplete="username" required maxlength="100">
+        <label for="password">Password</label><input id="password" type="password" autocomplete="current-password" required maxlength="1024">
+        <button type="submit">Sign in</button><p id="login-error" class="error" role="alert"></p>
+      </form>
     </section>
   </main>
   <script type="module" src="/assets/js/login.js"></script>
-  <script type="module" src="/static/js/theme.js"></script>
 </body>
 </html>

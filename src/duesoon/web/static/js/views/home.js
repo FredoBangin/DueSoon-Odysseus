@@ -1,28 +1,4 @@
 function node(tag,text,className=""){const el=document.createElement(tag);el.className=className;el.textContent=text;return el}
-function list(title,items){
-  const panel=node("article","","admin-card");
-  panel.append(node("h2",title));
-  if(!items.length) panel.append(node("p","Nothing here right now.","admin-toggle-sub"));
-  for(const item of items){
-    const row=node("div","","list-item");
-    const dot=node("span","","session-star");
-    if(item.course_color) dot.style.background=item.course_color;
-    const main=node("span","","grow");
-    main.append(node("strong",item.title),node("small",`${item.course_name} · ${item.submission_status}`,"admin-toggle-sub"));
-    const urgency=node("span",item.urgency.level,"cal-event-tag");
-    row.append(dot,main,urgency);
-    panel.append(row);
-  }
-  return panel;
-}
-export function renderHome(root,data){
-  root.replaceChildren();
-  root.append(
-    node("p","Academic briefing","section-title"),
-    list("Urgent",data.urgent),
-    list("Upcoming",data.upcoming),
-    list("Missing or overdue",[...data.missing,...data.overdue]),
-    list("Recently completed",data.completed_recently),
-  );
-}
+function list(title,items){const panel=node("article","","panel");panel.append(node("h2",title));if(!items.length)panel.append(node("p","Nothing here right now.","empty"));for(const item of items){const row=node("div","","item");const dot=node("span","","dot");dot.style.background=item.course_color;const main=node("div");main.append(node("strong",item.title),node("small",`${item.course_name} · ${item.submission_status}`));row.append(dot,main,node("span",item.urgency.level,"pill "+item.urgency.level.toLowerCase()));panel.append(row)}return panel}
+export function renderHome(root,data,onAsk){root.replaceChildren();const grid=node("div","","grid");const ask=node("article","","panel wide");ask.append(node("h2","Ask DueSoon"));const box=node("form","","assistant-box"),input=document.createElement("input"),button=node("button","Ask");input.placeholder="Hey, any updates on school stuff?";input.maxLength=500;box.append(input,button);box.addEventListener("submit",event=>{event.preventDefault();if(input.value.trim())onAsk(input.value.trim())});ask.append(box);grid.append(ask,list("Urgent",data.urgent),list("Upcoming",data.upcoming),list("Missing or overdue",[...data.missing,...data.overdue]),list("Recently completed",data.completed_recently));root.append(grid)}
 export {node};
