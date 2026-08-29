@@ -128,6 +128,7 @@ def test_curated_shell_excludes_unsupported_odysseus_chrome() -> None:
 
 def test_calendar_retains_controls_and_read_only_detail_behavior() -> None:
     source = read("js/views/calendar.js")
+    css = read("css/app.css")
 
     for mode in ('"month"', '"week"', '"agenda"'):
         assert mode in source
@@ -135,7 +136,19 @@ def test_calendar_retains_controls_and_read_only_detail_behavior() -> None:
         assert label in source
     assert "duesoon-calendar-detail" in source
     assert "Open in Canvas" in source
+    assert 'new Set(["submitted","graded"])' in source
+    assert "duesoon-calendar-complete" in source
+    assert "text-decoration: line-through" in css
     assert all(word not in source for word in ("createEvent", "updateEvent", "deleteEvent"))
+
+
+def test_gmail_can_be_saved_as_read_only_document_evidence() -> None:
+    source = read("js/views/foundations.js")
+
+    assert "Save inbox as evidence" in source
+    assert "/api/v1/dashboard/gmail/sync" in source
+    assert "DueSoon cannot send, delete, archive, or modify messages" in source
+    assert "Raw bodies and signed download URLs are not exposed" in source
 
 
 def test_frontend_runtime_remains_bounded_and_browser_secret_free() -> None:

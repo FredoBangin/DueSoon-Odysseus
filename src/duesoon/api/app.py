@@ -39,7 +39,7 @@ from src.duesoon.config.settings import DueSoonSettings, get_settings
 from src.duesoon.auth.service import AuthService
 from src.duesoon.dashboard.assistant import DeterministicAssistant
 from src.duesoon.dashboard.briefing import BriefingService
-from src.duesoon.google import GoogleWorkspaceClient, GoogleWorkspaceConfig
+from src.duesoon.google import GoogleEvidenceService, GoogleWorkspaceClient, GoogleWorkspaceConfig
 from src.duesoon.notifications.ntfy import NtfyPublishError, NtfyPublisher
 from src.duesoon.notifications.service import NotificationService
 from src.duesoon.persistence.database import (
@@ -102,6 +102,7 @@ def create_app(
     runtime_evidence = EvidenceInspectionService(runtime_sessions)
     runtime_learning = LearningService(runtime_sessions)
     runtime_retained = RetainedToolsService(runtime_sessions)
+    runtime_google_evidence = GoogleEvidenceService(runtime_sessions)
     runtime_model_settings = ModelSettingsService(
         ModelAssistantConfig(environment=runtime_settings.environment),
         runtime_sessions,
@@ -176,6 +177,7 @@ def create_app(
     application.state.retained = runtime_retained
     application.state.model_settings = runtime_model_settings
     application.state.google = runtime_google
+    application.state.google_evidence = runtime_google_evidence
     application.mount("/assets", StaticFiles(directory=WEB_STATIC), name="assets")
     application.mount(
         "/static",

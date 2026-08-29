@@ -2,8 +2,14 @@ import {get} from "../api.js";
 import {node} from "./home.js";
 
 const VIEWS=["month","week","agenda"];
+const COMPLETE_STATES=new Set(["submitted","graded"]);
 const iso=date=>`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
 const addDays=(value,count)=>new Date(value.getFullYear(),value.getMonth(),value.getDate()+count);
+const isComplete=event=>event.source==="canvas"&&COMPLETE_STATES.has(event.status);
+function markCompletion(element,event){
+  if(isComplete(event)) element.classList.add("duesoon-calendar-complete");
+  element.setAttribute("aria-label",`${event.title}, ${event.status}`);
+}
 function range(view,anchor){
   if(view==="month") return {start:new Date(anchor.getFullYear(),anchor.getMonth(),1),end:new Date(anchor.getFullYear(),anchor.getMonth()+1,0)};
   if(view==="week"){const start=addDays(anchor,-anchor.getDay());return {start,end:addDays(start,6)};}
@@ -15,6 +21,7 @@ function openDetail(event){
   const modal=node("div","","modal");
   modal.id="duesoon-calendar-detail";
   const content=node("section","","modal-content cal-modal-content");
+  markCompletion(content,event);
   content.setAttribute("role","dialog");
   content.setAttribute("aria-label","Assignment details");
   const header=node("div","","modal-header");
@@ -36,6 +43,7 @@ function openDetail(event){
 function eventRow(event){
   const row=node("button","","cal-event-row");
   row.type="button";
+  markCompletion(row,event);
   const dot=node("span","","cal-event-row-dot");
   dot.style.background=event.color||"var(--accent, var(--red))";
   row.append(dot,node("span",event.local_time||"","cal-event-row-time"),node("span",event.title,"cal-event-row-name"));
@@ -91,6 +99,7 @@ function drawAgenda(root,dates,events){
     day.append(node("h3",current.toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"}),"cal-agenda-date"));
     dayEvents.forEach(event=>{
       const row=node("button","","cal-agenda-event"); row.type="button"; row.onclick=()=>openDetail(event);
+      markCompletion(row,event);
       const dot=node("span","","cal-event-dot"); dot.style.background=event.color||"var(--accent, var(--red))";
       const info=node("span","","cal-event-info"); info.append(node("strong",event.title,"cal-event-name"),node("span",`${event.local_time} · ${event.course_name}`,"cal-event-time"));
       row.append(dot,info); day.append(row);

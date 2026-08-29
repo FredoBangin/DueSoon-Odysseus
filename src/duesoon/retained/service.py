@@ -19,7 +19,7 @@ from src.duesoon.persistence.models import (
 
 MEMORY_TYPES = {"alias", "preference", "matching_feedback", "source_reliability"}
 SCOPE_TYPES = {"assignment", "course", "sender", "global"}
-DOCUMENT_TYPES = {"file", "page", "module", "module_item"}
+DOCUMENT_TYPES = {"file", "page", "module", "module_item", "message"}
 
 
 class RetainedToolsService:
@@ -144,7 +144,7 @@ class RetainedToolsService:
             return self._memory_value(item)
 
     def documents(self, *, limit: int = 100) -> list[dict[str, Any]]:
-        """Return sanitized Canvas evidence metadata, never raw bodies or signed URLs."""
+        """Return sanitized academic evidence metadata, never raw bodies or signed URLs."""
         with self._sessions() as session:
             records = session.scalars(
                 select(SourceRecord)
@@ -213,19 +213,21 @@ class RetainedToolsService:
         title = (
             payload.get("display_name")
             or payload.get("title")
+            or payload.get("subject")
             or payload.get("name")
             or payload.get("filename")
             or f"Canvas {item.source_type}"
         )
         return {
-            "id": f"canvas:{item.source_type}:{item.external_id}:{item.version}",
+            "id": f"{item.source_system}:{item.source_type}:{item.external_id}:{item.version}",
             "source_type": item.source_type,
             "title": str(title)[:500],
             "course_name": course_name,
+            "sender": str(payload.get("from") or "")[:500] or None,
             "content_type": str(payload.get("content-type") or payload.get("content_type") or "")[:200],
             "size": payload.get("size") if isinstance(payload.get("size"), int) else None,
             "observed_at": item.observed_at.isoformat(),
-            "source": "canvas",
+            "source": item.source_system,
             "read_only": True,
             "version": item.version,
         }

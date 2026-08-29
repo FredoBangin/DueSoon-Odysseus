@@ -40,6 +40,18 @@
   margin-left: auto;
 }
 
+/* Canvas parity: submitted and graded work stays visible but reads as done. */
+.duesoon-calendar-complete {
+  opacity: 0.58;
+}
+
+.duesoon-calendar-complete .cal-event-row-name,
+.duesoon-calendar-complete .cal-event-name,
+.duesoon-calendar-complete .modal-header h4 {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
 .duesoon-ask-row {
   margin: 12px 0 0;
 }

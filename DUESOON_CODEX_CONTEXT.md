@@ -1916,3 +1916,43 @@ The rule applies to progress updates, status reports, explanations, and final ha
 Compression must never weaken safety or project quality. Security warnings, destructive-action confirmations, ambiguous multi-step instructions, and other high-risk communication must use enough normal prose to remain unambiguous. Source code, code comments, tests, commit messages, architecture documents, specifications, handoffs, issue reports, and third-party messages must remain clear professional prose rather than caveman phrasing.
 
 Credit efficiency must not reduce implementation scope, testing depth, evidence quality, or verification. Use fewer conversational tokens; do not skip necessary engineering work.
+
+---
+
+## 33. Approved Dual Priority and Assistant Autonomy Direction
+
+The owner approved separate urgency and work-priority decisions. `urgency_score` remains the
+absolute deterministic measure that controls reminder escalation. A separate versioned
+`work_priority_score` answers what should be started or continued now. Work priority is driven
+primarily by slack: usable available time minus remaining estimated effort minus a schedule buffer.
+Usable time excludes known sleep, classes, work, appointments, and other blocked calendar periods.
+When schedule access is missing, DueSoon uses explicit fallback assumptions, lowers confidence, and
+asks the owner for the relevant connection rather than pretending all clock time is available. A
+large distant project may therefore rank ahead of a small nearer task without falsely inflating
+deadline urgency.
+
+Effort estimates may use assignment type, course-relative value, instructions, modules, files,
+professor communications, historical outcomes, and owner corrections. AI may propose structured
+effort, progress, alias, and workload interpretations with confidence and provenance. Deterministic
+code validates them and calculates priority. These estimates must never silently alter deadlines,
+submission state, urgency, or reminder checkpoints.
+
+The DueSoon assistant is general-purpose and school-specialized. It should answer any safe question
+supported by the configured model, while academic questions receive structured cross-source
+retrieval across connected Canvas, Gmail, calendar, documents, Notes, Memory, assignment history,
+and professor evidence. When better context requires another application or permission, the
+assistant identifies the exact missing connection and asks the owner to provide it. Connected
+academic sources are read-only by default.
+
+The assistant may automatically learn low-risk, reversible preferences, course-scoped aliases,
+answer-format preferences, effort estimates, and planning corrections. Deadline values, submission
+state, reminder timing, professor identity, and source-authority changes require owner review and
+the validated evidence path. Sending email, changing Canvas, deleting evidence, or exposing secrets
+is never automatic.
+
+DueSoon exposes a verifiable decision trace rather than private model chain-of-thought. The trace
+shows sources consulted, evidence references, assumptions, confidence, deterministic calculations,
+tool/application activity, learned changes, policy/model versions, and a concise alternative
+summary. Full implementation order and acceptance criteria live in
+`docs/superpowers/plans/2026-08-28-duesoon-core-backend-completion.md`; the governing decision is
+`docs/architecture/0006-dual-priority-assistant-autonomy.md`.

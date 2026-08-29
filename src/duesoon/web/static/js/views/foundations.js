@@ -9,6 +9,9 @@ export async function renderEmail(root){
   const value=await get("/api/v1/dashboard/gmail?limit=25"); root.replaceChildren();
   const intro=node("article","",card); intro.append(node("h2","School email"),node("p","Read-only Gmail. DueSoon cannot send, delete, archive, or modify messages.",muted)); root.append(intro);
   if(!value.enabled){root.append(node("p","Gmail is not configured on the Azure server yet.",muted));return;}
+  const sync=node("button","Save inbox as evidence",action),result=node("span","",muted);
+  sync.type="button";sync.onclick=async()=>{sync.disabled=true;try{const saved=await post("/api/v1/dashboard/gmail/sync",{});result.textContent=`${saved.stored} new · ${saved.unchanged} unchanged`; }catch(error){result.textContent=error.message;}finally{sync.disabled=false;}};
+  const controls=node("div","","theme-io-row");controls.append(sync,result);intro.append(controls);
   if(!value.items.length) root.append(node("p","No matching inbox messages.",muted));
   for(const item of value.items){const email=node("article","",card);email.append(node("h2",item.subject),node("p",item.from,muted),node("p",item.snippet));if(item.attachments.length)email.append(node("small",`${item.attachments.length} attachment(s) · evidence metadata only`,muted));root.append(email);}
 }
@@ -42,9 +45,9 @@ export async function renderMemory(root){
 
 export async function renderDocuments(root){
   const value=await get("/api/v1/dashboard/documents?limit=150");root.replaceChildren();
-  const intro=node("article","",card);intro.append(node("h2","Canvas documents"),node("p","Read-only evidence catalog from Canvas files, pages, and modules. Raw document bodies and signed download URLs are not exposed here.",muted));root.append(intro);
-  if(!value.items.length){root.append(node("p","No Canvas document evidence synced yet.",muted));return;}
-  for(const item of value.items){const doc=node("article","",card);doc.append(node("h2",item.title),node("p",item.course_name||"Canvas",muted),node("span",item.source_type.replaceAll("_"," "),"cal-event-tag"));const details=[item.content_type,item.size?`${item.size} bytes`:null].filter(Boolean).join(" · ");if(details)doc.append(node("small",details,muted));root.append(doc);}
+  const intro=node("article","",card);intro.append(node("h2","Academic documents"),node("p","Read-only evidence catalog from Canvas files, pages, modules, and saved Gmail. Raw bodies and signed download URLs are not exposed here.",muted));root.append(intro);
+  if(!value.items.length){root.append(node("p","No document or email evidence synced yet.",muted));return;}
+  for(const item of value.items){const doc=node("article","",card);doc.append(node("h2",item.title),node("p",item.course_name||item.sender||item.source,muted),node("span",item.source_type.replaceAll("_"," "),"cal-event-tag"));const details=[item.content_type,item.size?`${item.size} bytes`:null].filter(Boolean).join(" · ");if(details)doc.append(node("small",details,muted));root.append(doc);}
 }
 
 export async function renderReview(root){

@@ -135,6 +135,23 @@ def gmail(
         raise HTTPException(status_code=502, detail="Gmail is temporarily unavailable") from exc
 
 
+@router.post("/gmail/sync", dependencies=[Depends(require_csrf)])
+def sync_gmail(
+    request: Request,
+    query: Annotated[str, Query(max_length=500)] = "label:inbox newer_than:90d",
+    limit: Annotated[int, Query(ge=1, le=50)] = 25,
+):
+    """Capture read-only Gmail messages as versioned evidence; never alter Gmail."""
+    google = request.app.state.google
+    if google is None or not google.config.gmail_enabled:
+        raise HTTPException(status_code=409, detail="Gmail is not configured")
+    try:
+        messages = google.list_gmail_messages(query=query, limit=limit)
+    except GoogleAPIError as exc:
+        raise HTTPException(status_code=502, detail="Gmail is temporarily unavailable") from exc
+    return request.app.state.google_evidence.store_messages(messages)
+
+
 @router.post("/assistant", dependencies=[Depends(require_csrf)])
 def assistant(payload: AssistantRequest, request: Request):
     return request.app.state.assistant.answer(payload.question, request.app.state.briefing.snapshot())
