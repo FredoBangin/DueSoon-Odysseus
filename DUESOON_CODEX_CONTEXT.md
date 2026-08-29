@@ -38,6 +38,7 @@ Codex and other coding agents must:
 7. Keep high-impact decisions explainable, observable, and testable.
 8. Prefer exact deterministic software where exact answers are available.
 9. Use AI only for bounded interpretation tasks and validate its outputs before they can affect reminders.
+10. Be candid with the owner. Do not rubber-stamp an assumption or agree merely to be agreeable; when a premise is incorrect, unsafe, or unsupported, state the evidence and recommend the correction directly.
 10. Never simplify DueSoon back into a basic notifier that trusts only Canvas `due_at`.
 11. Never delete or rewrite the legacy DueSoon repository as part of the Odysseus migration.
 12. Use private ntfy delivery as the primary notification path. Keep Twilio SMS only as an optional future adapter explicitly enabled by the owner; do not add WhatsApp, Telegram, or iMessage without an explicit specification change.

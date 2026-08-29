@@ -3,24 +3,24 @@ import {node} from "./home.js";
 
 function attachFeedback(reply,value){
   if(!value.answer_id) return;
-  const controls=node("div","","toolbar");
-  controls.append(node("span","Was this right?","muted"));
+  const controls=node("div","","cal-toolbar");
+  controls.append(node("span","Was this right?","admin-toggle-sub"));
   for(const verdict of ["correct","incorrect","uncertain"]){
-    const button=node("button",verdict,"secondary");
+    const button=node("button",verdict,"theme-io-btn");
     button.onclick=async()=>{
       controls.querySelectorAll("button").forEach(item=>item.disabled=true);
       if(verdict==="correct"){
         await post(`/api/v1/dashboard/assistant/${value.answer_id}/feedback`,{verdict});
-        controls.replaceChildren(node("span","Saved. Thanks.","muted"));
+        controls.replaceChildren(node("span","Saved. Thanks.","admin-toggle-sub"));
         return;
       }
-      const form=node("form","","panel");
+      const form=node("form","","admin-card");
       form.append(node("strong","What was wrong, and what should DueSoon understand next time?"));
       const correction=document.createElement("textarea");
       correction.required=true;
       correction.maxLength=2000;
       correction.rows=4;
-      const save=node("button","Create review proposal");
+      const save=node("button","Create review proposal","confirm-btn confirm-btn-primary");
       form.append(correction,save);
       form.onsubmit=async event=>{
         event.preventDefault();
@@ -31,10 +31,10 @@ function attachFeedback(reply,value){
             what_was_wrong:correction.value.trim(),
             scope_type:"global",
           });
-          form.replaceChildren(node("span","Proposal saved for your Review tab.","muted"));
+          form.replaceChildren(node("span","Proposal saved for your Review tab.","admin-toggle-sub"));
         }catch(error){
           save.disabled=false;
-          form.append(node("p",error.message,"error"));
+          form.append(node("p",error.message,"admin-toggle-sub"));
         }
       };
       reply.append(form);
@@ -46,44 +46,40 @@ function attachFeedback(reply,value){
 
 export function renderAssistant(root,initial=""){
   root.replaceChildren();
-  const intro=node("article","","panel wide");
-  intro.append(node("p","Ask about deadlines, missing work, workload, reminders, or what changed. Answers use your DueSoon evidence and never change canonical deadlines.","muted"));
+  const intro=node("article","","admin-card");
+  intro.append(node("h2","DueSoon assistant"),node("p","Ask from the Odysseus composer below about deadlines, missing work, workload, reminders, or what changed. Answers never change canonical deadlines.","admin-toggle-sub"));
   const log=node("div");
-  const form=node("form","","assistant-box");
-  const input=document.createElement("input");
-  const button=node("button","Ask");
-  input.maxLength=500;
-  input.placeholder="Hey, any updates on school stuff?";
-  form.append(input,button);
-  root.append(intro,log,form);
+  root.append(intro,log);
 
   async function ask(question){
-    log.append(node("div",question,"message user"));
-    button.disabled=true;
+    const user=node("div","","msg msg-user");
+    user.innerHTML='<div class="role">You</div><div class="body"></div>';
+    user.querySelector(".body").textContent=question;
+    log.append(user);
     try{
       const value=await post("/api/v1/dashboard/assistant",{question});
-      const reply=node("div","","message");
-      reply.append(node("strong",value.answer));
+      const reply=node("div","","msg msg-ai");
+      reply.innerHTML='<div class="role">DueSoon</div><div class="body"></div>';
+      const body=reply.querySelector(".body");
+      body.append(node("p",value.answer));
       const detail=[value.mode,value.model,value.confidence,`data ${value.data_freshness}`].filter(Boolean).join(" · ");
-      reply.append(node("p",detail,"muted"));
-      const evidence=node("div","","evidence");
+      body.append(node("p",detail,"admin-toggle-sub"));
+      const evidence=node("div","","cal-toolbar");
       for(const item of value.evidence||[]){
-        const link=node("a",item.label);
+        const link=node("a",item.label,"theme-io-btn");
         link.href=item.href;
         link.rel="noopener noreferrer";
         evidence.append(link);
       }
-      reply.append(evidence);
+      body.append(evidence);
       attachFeedback(reply,value);
       log.append(reply);
-    }catch(error){ log.append(node("div",error.message,"message error")); }
-    finally{ button.disabled=false; }
+    }catch(error){
+      const reply=node("div","","msg msg-ai");
+      reply.innerHTML='<div class="role">DueSoon</div><div class="body"></div>';
+      reply.querySelector(".body").textContent=error.message;
+      log.append(reply);
+    }
   }
-  form.addEventListener("submit",event=>{
-    event.preventDefault();
-    const value=input.value.trim();
-    input.value="";
-    if(value) ask(value);
-  });
   if(initial) ask(initial);
 }

@@ -18,6 +18,7 @@ It is the foundational product specification and learning base, not optional not
 - Keep legacy Odysseus code inert until each retained academic primitive has a tested DueSoon replacement.
 - Odysseus owns the complete visual system and interaction shell: navigation, menus, submenus, settings panels, popovers, dropdowns, modals, dialogs, cards, forms, buttons, spacing, animations, backgrounds, and responsive behavior. Reuse its original markup, classes, components, and behavior; do not create replacement DueSoon UI patterns.
 - Keep product effort focused on DueSoon academic intelligence: evidence ingestion, assignment matching, deadline resolution, urgency, submission detection, reminders, learning, explanations, and notification reliability.
+- Be candid and evidence-led with the owner: do not rubber-stamp a plan or agree for comfort. If an assumption, diagnosis, or requested direction is wrong or risky, say so plainly, explain why, and recommend the safer correction.
 - Use the installed `caveman` skill for all user-facing agent conversation by default to conserve credits. Keep technical accuracy, security warnings, code, commits, tests, architecture documents, and other durable project artifacts in clear normal prose. Caveman mode remains active until the owner explicitly says `stop caveman` or `normal mode`.
 
 ## Current Repository Baseline

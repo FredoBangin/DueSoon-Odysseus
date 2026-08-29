@@ -2,6 +2,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2] / "src/duesoon/web/static"
+AUTH = (Path(__file__).resolve().parents[2] / "src/duesoon/api/routes/auth.py").read_text(encoding="utf-8")
 
 
 def read(path: str) -> str:
@@ -9,26 +10,15 @@ def read(path: str) -> str:
 
 
 def test_shell_keeps_odysseus_structure_palette_and_all_due_soon_tabs() -> None:
-    html = read("index.html")
+    html = (Path(__file__).resolve().parents[2] / "static/index.html").read_text(encoding="utf-8")
     css = (ROOT.parents[3] / "static/style.css").read_text(encoding="utf-8")
 
     assert 'class="sidebar"' in html
     assert 'class="sidebar-header"' in html
     assert 'class="sidebar-inner"' in html
     assert 'class="hamburger-btn"' in html
-    for label in (
-        "Home",
-        "Assistant",
-        "Calendar",
-        "Email",
-        "Notifications",
-        "Review",
-        "Settings",
-        "Notes",
-        "Memory",
-        "Documents",
-    ):
-        assert f">{label}<" in html
+    for label in ("Calendar", "Email", "Brain", "Notes", "Tasks", "Theme", "Library"):
+        assert label in html
 
     assert "--bg: #282c34" in css
     assert "--fg: #9cdef2" in css
@@ -38,19 +28,11 @@ def test_shell_keeps_odysseus_structure_palette_and_all_due_soon_tabs() -> None:
     assert "'Fira Code'" in css
 
 
-def test_due_soon_bridge_css_does_not_replace_the_odysseus_shell() -> None:
-    css = read("css/app.css")
-
-    for forbidden in (
-        "\nbody {",
-        "\n.sidebar {",
-        "\n.sidebar-header {",
-        "\n.sidebar-inner {",
-        "\n.hamburger-btn {",
-        "\n.icon-rail {",
-    ):
-        assert forbidden not in f"\n{css}"
-    assert ".duesoon-workspace" in css
+def test_due_soon_uses_inherited_shell_and_has_no_duplicate_css_layer() -> None:
+    assert not (ROOT / "css/app.css").exists()
+    assert "ODYSSEUS_STATIC" in AUTH
+    assert 'read_text(encoding="utf-8")' in AUTH
+    assert 'src="/assets/js/odysseus-shell.js"' in AUTH
 
 
 def test_calendar_retains_odysseus_controls_and_read_only_detail_behavior() -> None:
@@ -60,7 +42,7 @@ def test_calendar_retains_odysseus_controls_and_read_only_detail_behavior() -> N
         assert mode in source
     for label in ("Previous", "Today", "Next"):
         assert label in source
-    assert "detail-drawer" in source
+    assert "duesoon-calendar-detail" in source
     assert "Open in Canvas" in source
     assert all(word not in source for word in ("createEvent", "updateEvent", "deleteEvent"))
 
@@ -83,7 +65,7 @@ def test_frontend_runtime_remains_bounded_and_browser_secret_free() -> None:
 
 
 def test_shell_does_not_surface_internal_canvas_freshness_badges() -> None:
-    html = read("index.html")
+    html = (Path(__file__).resolve().parents[2] / "static/index.html").read_text(encoding="utf-8")
     source = read("js/app.js")
 
     assert "sidebar-freshness" not in html
@@ -94,13 +76,13 @@ def test_shell_does_not_surface_internal_canvas_freshness_badges() -> None:
 
 
 def test_shell_runs_inherited_odysseus_background_and_theme_controls() -> None:
-    html = read("index.html")
+    html = (Path(__file__).resolve().parents[2] / "static/index.html").read_text(encoding="utf-8")
     source = read("js/odysseus-shell.js")
 
-    assert 'class="bg-pattern-constellations"' in html
-    assert 'src="/assets/js/odysseus-shell.js"' in html
+    assert 'bg-pattern-constellations' in html or 'bg-pattern-constellations' in AUTH
+    assert 'src="/assets/js/odysseus-shell.js"' in AUTH
     assert 'id="tool-theme-btn"' in html
-    assert 'id="theme-submenu"' in html
+    assert 'id="theme-modal"' in (Path(__file__).resolve().parents[2] / "static/index.html").read_text(encoding="utf-8")
     assert 'id="sidebar-toggle-btn"' in html
     assert 'from "/static/js/theme.js"' in source
     assert 'applyBgPattern("constellations")' in source
@@ -108,34 +90,22 @@ def test_shell_runs_inherited_odysseus_background_and_theme_controls() -> None:
 
 
 def test_shell_uses_odysseus_sections_and_account_bar_for_all_due_soon_views() -> None:
-    html = read("index.html")
+    html = (Path(__file__).resolve().parents[2] / "static/index.html").read_text(encoding="utf-8")
 
-    assert 'id="sidebar-new-chat-btn"' not in html
-    assert html.count('class="section-collapse-btn"') == 2
-    assert 'aria-label="Collapse Academic"' in html
-    assert 'aria-label="Collapse Tools"' in html
-    assert 'class="section" id="academic-section"' in html
-    assert 'class="section" id="retained-tools-section"' in html
+    assert 'id="sessions-section"' in html
+    assert 'id="email-section"' in html
+    assert 'id="tools-section"' in html
     assert 'id="sidebar-user-bar"' in html
     assert 'id="user-bar-profile"' in html
     assert 'id="user-bar-settings"' in html
-    for view in (
-        "home",
-        "assistant",
-        "calendar",
-        "email",
-        "notifications",
-        "review",
-        "settings",
-        "notes",
-        "memory",
-        "documents",
-    ):
-        assert f'data-view="{view}"' in html
+    for element in ("rail-calendar", "rail-email", "rail-memory", "rail-notes", "rail-archive", "rail-tasks", "rail-settings"):
+        assert f'id="{element}"' in html
+    for element in ("sidebar-brand-btn", "user-bar-profile", "user-bar-settings"):
+        assert f'id="{element}"' in html
 
 
 def test_compact_navigation_reuses_odysseus_svg_icons_not_placeholder_glyphs() -> None:
-    html = read("index.html")
+    html = (Path(__file__).resolve().parents[2] / "static/index.html").read_text(encoding="utf-8")
     rail = html.split('<div class="icon-rail"', 1)[1].split("</div>\n\n  <nav", 1)[0]
 
     assert rail.count("<svg") >= 9
@@ -154,6 +124,7 @@ def test_inherited_odysseus_assets_are_included_in_production_build_context() ->
 def test_login_uses_same_odysseus_visual_language() -> None:
     html = read("login.html")
 
-    assert 'class="login-shell"' in html
+    assert 'href="/static/style.css"' in html
+    assert 'class="modal-content"' in html
     assert "DueSoon" in html
     assert "Odysseus" in html

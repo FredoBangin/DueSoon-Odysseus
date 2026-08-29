@@ -30,34 +30,43 @@ window.closeDueSoonSidebar = () => {
   if (matchMedia("(max-width: 768px)").matches) setSidebarOpen(false);
 };
 
-document.querySelectorAll("[data-section-toggle]").forEach((button) => {
-  const section = document.getElementById(button.dataset.sectionToggle)?.closest(".section");
-  const items = document.getElementById(button.dataset.sectionToggle);
-  const collapse = section?.querySelector(".section-collapse-btn");
-  if (!section || !items) return;
-
+document.querySelectorAll(".section").forEach((section) => {
+  const button = section.querySelector("[data-section-toggle], .section-header-flex .section-title");
+  const collapse = section.querySelector(".section-collapse-btn");
+  const header = section.querySelector(".section-header-flex");
+  if (!button || !header) return;
+  const label = button.textContent.trim();
   const setExpanded = (expanded) => {
     section.classList.toggle("collapsed", !expanded);
-    items.hidden = !expanded;
+    const target = button.dataset.sectionToggle ? document.getElementById(button.dataset.sectionToggle) : null;
+    if (target) target.hidden = !expanded;
     button.setAttribute("aria-expanded", String(expanded));
     collapse?.setAttribute("aria-expanded", String(expanded));
-    collapse?.setAttribute("aria-label", `${expanded ? "Collapse" : "Expand"} ${button.textContent.trim()}`);
+    collapse?.setAttribute("aria-label", `${expanded ? "Collapse" : "Expand"} ${label}`);
   };
   const toggle = (event) => {
     event.stopPropagation();
     setExpanded(section.classList.contains("collapsed"));
   };
-
   button.addEventListener("click", toggle);
+  if (!button.dataset.sectionToggle) header.addEventListener("click", toggle);
   collapse?.addEventListener("click", toggle);
 });
 
 const themeButton = document.querySelector("#tool-theme-btn");
 const themeSubmenu = document.querySelector("#theme-submenu");
-themeButton.addEventListener("click", () => {
-  const open = themeSubmenu.hidden;
-  themeSubmenu.hidden = !open;
-  themeButton.setAttribute("aria-expanded", String(open));
+const themeModal = document.querySelector("#theme-modal");
+themeButton?.addEventListener("click", () => {
+  if (themeSubmenu) {
+    const open = themeSubmenu.hidden;
+    themeSubmenu.hidden = !open;
+    themeButton.setAttribute("aria-expanded", String(open));
+  } else if (themeModal) {
+    themeModal.classList.toggle("hidden");
+  }
+});
+document.querySelectorAll("#theme-modal .close-btn, #theme-modal .modal-close").forEach((button) => {
+  button.addEventListener("click", () => themeModal?.classList.add("hidden"));
 });
 
 document.querySelectorAll("[data-theme]").forEach((button) => {
