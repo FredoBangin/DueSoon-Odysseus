@@ -1,6 +1,7 @@
 """Browser-session-only dashboard APIs."""
 
 from datetime import UTC, date, datetime, time
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -17,6 +18,7 @@ from src.duesoon.google import GoogleAPIError
 
 router = APIRouter(prefix="/api/v1/dashboard", tags=["dashboard"],
                    dependencies=[Depends(require_browser_session)])
+logger = logging.getLogger(__name__)
 
 
 class AssistantRequest(BaseModel):
@@ -154,7 +156,17 @@ def sync_gmail(
         messages = google.list_gmail_messages(query=query, limit=limit)
     except GoogleAPIError as exc:
         raise HTTPException(status_code=502, detail="Gmail is temporarily unavailable") from exc
-    return request.app.state.google_evidence.store_messages(messages)
+    result = request.app.state.google_evidence.store_messages(messages)
+    model = request.app.state.model_settings.effective()
+    if result["stored"] and model.enabled and model.configured:
+        try:
+            request.app.state.evidence_pipeline.process_pending(
+                limit=min(result["stored"], 5)
+            )
+        except Exception:
+            # Capturing read-only Gmail evidence must not fail if optional extraction does.
+            logger.exception("Gmail evidence extraction failed")
+    return result
 
 
 @router.post("/assistant", dependencies=[Depends(require_csrf)])

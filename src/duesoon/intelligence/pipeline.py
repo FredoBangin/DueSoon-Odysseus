@@ -16,7 +16,7 @@ from datetime import datetime
 from html.parser import HTMLParser
 from typing import Any, Protocol
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from src.duesoon.intelligence.deadline_resolver import source_authority
@@ -59,7 +59,7 @@ DEADLINE_CLAIM_TYPES = frozenset(
         "deadline_moved_earlier_to",
     }
 )
-SUPPORTED_SOURCE_TYPES = frozenset(
+CANVAS_SOURCE_TYPES = frozenset(
     {"assignment", "conversation", "announcement", "module", "module_item", "page"}
 )
 SOURCE_KIND = {
@@ -69,6 +69,7 @@ SOURCE_KIND = {
     "page": "assignment_instructions",
     "module": "canvas_module",
     "module_item": "canvas_module",
+    "message": "professor_email_correction",
 }
 CONFIDENCE = {"high": 0.90, "medium": 0.75, "low": 0.50}
 EXPLICITNESS = {"explicit": 1.0, "implied": 0.70, "ambiguous": 0.45}
@@ -227,8 +228,16 @@ class CanvasEvidencePipeline:
             source_ids = session.scalars(
                 select(SourceRecord.id)
                 .where(
-                    SourceRecord.source_system == "canvas",
-                    SourceRecord.source_type.in_(SUPPORTED_SOURCE_TYPES),
+                    or_(
+                        and_(
+                            SourceRecord.source_system == "canvas",
+                            SourceRecord.source_type.in_(CANVAS_SOURCE_TYPES),
+                        ),
+                        and_(
+                            SourceRecord.source_system == "gmail",
+                            SourceRecord.source_type == "message",
+                        ),
+                    ),
                     SourceRecord.ingestion_status == "ingested",
                 )
                 .order_by(SourceRecord.id)
@@ -409,6 +418,16 @@ def _source_text(session: Session, source: SourceRecord) -> CanvasSourceText:
         parts.extend((_plain(payload.get("title")), _plain(payload.get("content"))))
         if str(payload.get("type", "")).casefold() == "assignment" and payload.get("content_id"):
             exact_assignment_id = str(payload["content_id"])
+    elif source.source_type == "message" and source.source_system == "gmail":
+        parts.extend(
+            (
+                _plain(payload.get("subject")),
+                _plain(payload.get("body")),
+                _plain(payload.get("snippet")),
+            )
+        )
+        author_identity = _plain(payload.get("from")) or None
+        author_role = "email_sender_unverified"
 
     course = session.get(Course, source.course_id) if source.course_id else None
     text = "\n".join(item for item in parts if item)[:12000]

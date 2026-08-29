@@ -371,6 +371,60 @@ def test_review_limit_applies_after_admitted_claims_are_excluded(tmp_path: Path)
         engine.dispose()
 
 
+def test_saved_gmail_message_extracts_reviewable_claim_without_cross_course_guessing(
+    tmp_path: Path,
+) -> None:
+    engine, sessions = database(tmp_path)
+    try:
+        with sessions() as session:
+            session.add(
+                SourceRecord(
+                    source_system="gmail",
+                    source_type="message",
+                    external_id="gmail-message-1",
+                    source_published_at=PUBLISHED,
+                    observed_at=PUBLISHED,
+                    content_hash="gmail-message-1",
+                    version=1,
+                    raw_payload={
+                        "subject": "Lab 4 deadline",
+                        "from": "Professor <professor@example.edu>",
+                        "body": CORRECTION,
+                    },
+                )
+            )
+            session.commit()
+        extractor = RecordingExtractor(
+            (
+                AcademicClaim(
+                    claim_type="deadline_extended_to",
+                    assignment_hint="Lab 4",
+                    normalized_value={
+                        "due_at": NEW_DUE.isoformat(),
+                        "precision": "exact_datetime",
+                    },
+                    source_locator=CORRECTION,
+                    confidence_band="high",
+                    explicitness="explicit",
+                ),
+            )
+        )
+
+        summary = CanvasEvidencePipeline(sessions, extractor).process_pending()
+
+        assert summary.processed_sources == 1
+        assert summary.claims_created == 1
+        assert summary.evidence_created == 0
+        assert summary.needs_review == 1
+        review = EvidenceReviewService(sessions).list_pending()
+        assert review[0]["source_type"] == "message"
+        assert review[0]["status"] == "unmatched"
+        assert review[0]["assignment_id"] is None
+        assert "professor@example.edu" not in str(review)
+    finally:
+        engine.dispose()
+
+
 def test_app_wires_injected_claim_extractor_into_live_canvas_sync(tmp_path: Path) -> None:
     settings = DueSoonSettings(
         _env_file=None,
