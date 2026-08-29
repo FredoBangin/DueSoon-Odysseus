@@ -55,10 +55,91 @@ export async function renderReview(root){
 }
 
 export async function renderSettings(root){
-  const [value,model]=await Promise.all([get("/api/v1/dashboard/settings"),get("/api/v1/dashboard/model-settings")]);root.replaceChildren();
-  const connections=node("article","",card);connections.append(node("h2","Connections and capabilities"));for(const [name,status] of Object.entries({...value.features,canvas:value.canvas.status,notifications:value.notifications.status})){const row=node("div","","list-item");row.append(node("span",name.replaceAll("_"," "),"grow"),node("span",String(status),"cal-event-tag"));connections.append(row);}root.append(connections);
-  const provider=node("form","",card);provider.append(node("h2","Assistant model routing"),node("p",model.api_key_configured?"API key loaded securely from the server environment.":"Add DUESOON_MODEL_API_KEY to the Azure secrets file before enabling.",muted),node("p",`Provider: ${model.base_url}`,muted));
-  const enabled=document.createElement("input");enabled.type="checkbox";enabled.checked=model.enabled;const enabledLabel=node("label","Enable model-backed answers");enabledLabel.prepend(enabled);
-  const primary=document.createElement("input");primary.value=model.primary_model||"";primary.placeholder="Primary model";const fallbacks=document.createElement("input");fallbacks.value=(model.fallback_models||[]).join(", ");fallbacks.placeholder="Fallback models, comma separated";const save=node("button","Save model settings",action),result=node("p","",muted);provider.append(enabledLabel,primary,fallbacks,save,result);
-  provider.onsubmit=async event=>{event.preventDefault();save.disabled=true;try{await patch("/api/v1/dashboard/model-settings",{enabled:enabled.checked,primary_model:primary.value.trim(),fallback_models:fallbacks.value.split(",").map(item=>item.trim()).filter(Boolean)});result.textContent="Saved. Server-held API key was not exposed.";}catch(error){result.textContent=error.message;}finally{save.disabled=false;}};root.append(provider);
+  const [value,model]=await Promise.all([get("/api/v1/dashboard/settings"),get("/api/v1/dashboard/model-settings")]);
+  root.replaceChildren();
+  document.querySelectorAll("[data-duesoon-settings-tab]").forEach(button=>button.classList.toggle("active",button.dataset.duesoonSettingsTab==="connections"));
+
+  const connectionsPanel=node("section","");
+  connectionsPanel.dataset.settingsPanel="connections";
+  const connections=node("article","",card);
+  connections.append(node("h2","Connections and capabilities"));
+  for(const [name,status] of Object.entries({...value.features,canvas:value.canvas.status,notifications:value.notifications.status})){
+    const row=node("div","","admin-toggle-row");
+    const copy=node("div","");
+    copy.append(node("div",name.replaceAll("_"," "),"admin-toggle-label"));
+    row.append(copy,node("span",String(status),"cal-event-tag"));
+    connections.append(row);
+  }
+  connectionsPanel.append(connections);
+
+  const assistantPanel=node("section","","hidden");
+  assistantPanel.dataset.settingsPanel="assistant";
+  const provider=node("form","",card);
+  provider.append(
+    node("h2","Assistant model routing"),
+    node("p",model.api_key_configured?"API key loaded securely from the server environment.":"Add DUESOON_MODEL_API_KEY to the Azure secrets file before enabling.",muted),
+    node("p",`Provider: ${model.base_url}`,muted),
+  );
+
+  const enabled=document.createElement("input");
+  enabled.type="checkbox";
+  enabled.checked=model.enabled;
+  const switchControl=node("label","","admin-switch");
+  switchControl.append(enabled,node("span","","admin-slider"));
+  const enabledRow=node("div","","admin-toggle-row");
+  const enabledCopy=node("div","");
+  enabledCopy.append(node("div","Model-backed answers","admin-toggle-label"),node("div","Deterministic answers remain available when disabled.","admin-toggle-sub"));
+  enabledRow.append(enabledCopy,switchControl);
+
+  const primaryLabel=node("label","Primary model","settings-label");
+  const primary=document.createElement("input");
+  primary.className="settings-input";
+  primary.type="text";
+  primary.value=model.primary_model||"";
+  primary.placeholder="Primary model";
+
+  const fallbacksLabel=node("label","Fallback models","settings-label");
+  const fallbacks=document.createElement("input");
+  fallbacks.className="settings-input";
+  fallbacks.type="text";
+  fallbacks.value=(model.fallback_models||[]).join(", ");
+  fallbacks.placeholder="Comma separated";
+
+  const save=node("button","Save model settings","confirm-btn confirm-btn-primary");
+  const result=node("p","",muted);
+  provider.append(enabledRow,primaryLabel,primary,fallbacksLabel,fallbacks,save,result);
+  provider.onsubmit=async event=>{event.preventDefault();save.disabled=true;try{await patch("/api/v1/dashboard/model-settings",{enabled:enabled.checked,primary_model:primary.value.trim(),fallback_models:fallbacks.value.split(",").map(item=>item.trim()).filter(Boolean)});result.textContent="Saved. Server-held API key was not exposed.";}catch(error){result.textContent=error.message;}finally{save.disabled=false;}};
+  assistantPanel.append(provider);
+
+  const appearancePanel=node("section","","hidden");
+  appearancePanel.dataset.settingsPanel="appearance";
+  const themes=node("article","",card);
+  themes.append(node("h2","Theme"),node("p","Choose an inherited Odysseus palette.",muted));
+  const themeChoices=node("div","","theme-io-row");
+  for(const option of [["dark","Dark"],["midnight","Midnight"],["ocean","Ocean"],["forest","Forest"],["ume","Ume"]]){
+    const button=node("button",option[1],"theme-io-btn");
+    button.type="button";
+    button.dataset.theme=option[0];
+    themeChoices.append(button);
+  }
+  themes.append(themeChoices);
+  const backgrounds=node("article","",card);
+  backgrounds.append(node("h2","Animated background"),node("p","Use the original Odysseus effects or turn animation off.",muted));
+  const backgroundChoices=node("div","","theme-io-row");
+  for(const option of [["constellations","Constellations"],["rain","Rain"],["perlin-flow","Flow"],["none","None"]]){
+    const button=node("button",option[1],"theme-io-btn");
+    button.type="button";
+    button.dataset.bgPattern=option[0];
+    backgroundChoices.append(button);
+  }
+  backgrounds.append(backgroundChoices);
+  appearancePanel.append(themes,backgrounds);
+
+  root.append(connectionsPanel,assistantPanel,appearancePanel);
+  document.querySelectorAll("[data-duesoon-settings-tab]").forEach(button=>{
+    button.onclick=()=>{
+      document.querySelectorAll("[data-duesoon-settings-tab]").forEach(item=>item.classList.toggle("active",item===button));
+      root.querySelectorAll("[data-settings-panel]").forEach(panel=>panel.classList.toggle("hidden",panel.dataset.settingsPanel!==button.dataset.duesoonSettingsTab));
+    };
+  });
 }

@@ -36,13 +36,27 @@ document.querySelectorAll(".section").forEach((section) => {
   const header = section.querySelector(".section-header-flex");
   if (!button || !header) return;
   const label = button.textContent.trim();
+  let transitionTimer;
   const setExpanded = (expanded) => {
-    section.classList.toggle("collapsed", !expanded);
     const target = button.dataset.sectionToggle ? document.getElementById(button.dataset.sectionToggle) : null;
-    if (target) target.hidden = !expanded;
+    clearTimeout(transitionTimer);
     button.setAttribute("aria-expanded", String(expanded));
     collapse?.setAttribute("aria-expanded", String(expanded));
     collapse?.setAttribute("aria-label", `${expanded ? "Collapse" : "Expand"} ${label}`);
+    if (expanded) {
+      if (target) target.hidden = false;
+      section.classList.remove("collapsed", "section-just-collapsing");
+      section.classList.add("section-just-expanded");
+      transitionTimer = setTimeout(() => section.classList.remove("section-just-expanded"), 700);
+      return;
+    }
+    section.classList.remove("section-just-expanded");
+    section.classList.add("section-just-collapsing");
+    transitionTimer = setTimeout(() => {
+      section.classList.add("collapsed");
+      section.classList.remove("section-just-collapsing");
+      if (target) target.hidden = true;
+    }, 330);
   };
   const toggle = (event) => {
     event.stopPropagation();
@@ -53,40 +67,24 @@ document.querySelectorAll(".section").forEach((section) => {
   collapse?.addEventListener("click", toggle);
 });
 
-const themeButton = document.querySelector("#tool-theme-btn");
-const themeSubmenu = document.querySelector("#theme-submenu");
-const themeModal = document.querySelector("#theme-modal");
-themeButton?.addEventListener("click", () => {
-  if (themeSubmenu) {
-    const open = themeSubmenu.hidden;
-    themeSubmenu.hidden = !open;
-    themeButton.setAttribute("aria-expanded", String(open));
-  } else if (themeModal) {
-    themeModal.classList.toggle("hidden");
-  }
-});
-document.querySelectorAll("#theme-modal .close-btn, #theme-modal .modal-close").forEach((button) => {
-  button.addEventListener("click", () => themeModal?.classList.add("hidden"));
-});
-
-document.querySelectorAll("[data-theme]").forEach((button) => {
-  button.addEventListener("click", () => {
-    const name = button.dataset.theme;
+document.addEventListener("click", (event) => {
+  const themeChoice = event.target.closest("[data-theme]");
+  if (themeChoice) {
+    const name = themeChoice.dataset.theme;
     const colors = THEMES[name];
     if (!colors) return;
     applyColors(colors);
     save(name, colors, { bgPattern: document.body.dataset.bgPattern || "constellations" });
-  });
-});
-
-document.querySelectorAll("[data-bg-pattern]").forEach((button) => {
-  button.addEventListener("click", () => {
-    const pattern = button.dataset.bgPattern;
+    return;
+  }
+  const patternChoice = event.target.closest("[data-bg-pattern]");
+  if (patternChoice) {
+    const pattern = patternChoice.dataset.bgPattern;
     document.body.dataset.bgPattern = pattern;
     applyBgPattern(pattern);
     const current = themeModule.getSaved();
     if (current?.colors) save(current.name, current.colors, { bgPattern: pattern });
-  });
+  }
 });
 
 const saved = themeModule.getSaved();

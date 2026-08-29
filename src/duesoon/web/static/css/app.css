@@ -1,4 +1,4 @@
-/* DueSoon content bridge. The inherited /static/style.css owns the shell. */
+/* DueSoon layout adapters. Odysseus' /static/style.css owns components. */
 
 .duesoon-workspace {
   flex: 1;
@@ -10,93 +10,161 @@
   width: min(1320px, 100%);
   min-height: 0;
   margin: 0 auto;
-  padding: 24px;
+  padding: 20px 24px 32px;
   overflow: auto;
   scrollbar-width: thin;
 }
 
-.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-.panel { min-width: 0; padding: 16px; margin-bottom: 14px; background: color-mix(in srgb, var(--panel) 72%, var(--bg)); border: 1px solid color-mix(in srgb, var(--fg) 11%, transparent); border-radius: 9px; box-shadow: 0 8px 30px rgb(0 0 0 / 8%); }
-.panel.wide { grid-column: 1 / -1; }
-.panel h2 { margin: 0 0 14px; font-size: 13px; font-weight: 600; }
-.panel p { line-height: 1.55; }
+.duesoon-dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  gap: 12px;
+  align-items: start;
+}
 
-.item,
-.capability { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 9px 2px; border-top: 1px solid color-mix(in srgb, var(--fg) 8%, transparent); }
-.item > div { min-width: 0; flex: 1; display: grid; gap: 4px; }
-.item strong,
-.item small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.item small,
-.workspace-content small,
-.muted { color: var(--color-muted, #888); }
-.capability { justify-content: space-between; text-transform: capitalize; }
+.duesoon-dashboard-grid > .admin-card {
+  min-width: 0;
+  margin: 0;
+}
 
-.pill,
-.status { display: inline-flex; align-items: center; padding: 4px 8px; border: 1px solid var(--border); border-radius: 999px; color: var(--color-muted, #888); font-size: 10px; line-height: 1.2; text-transform: capitalize; }
-.pill.high,
-.pill.critical { color: var(--red); border-color: color-mix(in srgb, var(--red) 45%, transparent); }
-.pill.medium { color: var(--warn); }
-.pill.low { color: var(--green); }
-.empty { color: var(--color-muted, #888); padding: 20px 0; }
-.form-stack { display: grid; gap: 9px; }
-.form-stack h2,
-.form-stack p { margin-bottom: 2px; }
+.duesoon-card-wide {
+  grid-column: 1 / -1;
+}
 
-.assistant-box { display: flex; gap: 8px; }
-.workspace-content input,
-.workspace-content textarea,
-.workspace-content select { width: 100%; min-height: 40px; padding: 9px 11px; color: var(--fg); background: color-mix(in srgb, var(--bg) 72%, black); border: 1px solid var(--border); border-radius: 7px; outline: none; }
-.workspace-content input:focus,
-.workspace-content textarea:focus,
-.workspace-content select:focus { border-color: var(--fg); box-shadow: 0 0 0 2px color-mix(in srgb, var(--fg) 10%, transparent); }
-.workspace-content button { min-height: 38px; padding: 8px 13px; color: var(--fg); background: color-mix(in srgb, var(--red) 16%, var(--panel)); border: 1px solid color-mix(in srgb, var(--red) 50%, var(--border)); border-radius: 7px; cursor: pointer; }
-.workspace-content button.secondary { background: transparent; border-color: var(--border); }
-.workspace-content button:hover:not(:disabled) { filter: brightness(1.15); }
-.workspace-content button:disabled { opacity: .45; cursor: wait; }
+.duesoon-assignment-list .cal-event-item:last-child {
+  margin-bottom: 0;
+}
 
-.message { max-width: 840px; margin: 0 0 12px; padding: 14px; background: color-mix(in srgb, var(--panel) 70%, var(--bg)); border-left: 2px solid var(--border); border-radius: 4px 8px 8px 4px; }
-.message.user { margin-left: auto; border-color: var(--red); }
-.message.error,
-.error { color: var(--red); }
-.evidence { display: flex; flex-wrap: wrap; gap: 7px; }
-.evidence a { padding: 4px 7px; font-size: 10px; text-decoration: none; border: 1px solid var(--border); border-radius: 999px; }
+.duesoon-assignment-list .cal-event-tag {
+  flex-shrink: 0;
+  margin-left: auto;
+}
 
-.toolbar { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 14px; }
-.calendar-heading { margin-left: auto; align-self: center; color: var(--color-muted, #888); }
-.calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(100px, 1fr)); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
-.day { min-height: 135px; padding: 8px; display: flex; flex-direction: column; gap: 6px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--panel) 54%, var(--bg)); }
-.day:nth-child(7n) { border-right: 0; }
-.day > strong { color: var(--color-muted, #888); font-size: 10px; font-weight: 400; }
-.event { display: block; padding: 5px 6px; border-left: 3px solid var(--event, var(--red)); border-radius: 3px; background: color-mix(in srgb, var(--event, var(--red)) 13%, transparent); font-size: 10px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; }
-.agenda-row { cursor: pointer; }
-.detail-drawer { position: fixed; inset: 72px 0 0 auto; z-index: 280; width: min(420px, 100%); padding: 22px; background: var(--panel); border-left: 1px solid var(--border); box-shadow: -15px 0 40px rgb(0 0 0 / 24%); overflow-y: auto; }
-.detail-drawer h2 { margin-top: 24px; }
-.drawer-close { float: right; }
+.duesoon-ask-row {
+  margin: 12px 0 0;
+}
 
-/* Login is a DueSoon auth surface but uses the exact Odysseus palette/type. */
-.login-page { --bg: #282c34; --fg: #9cdef2; --panel: #111; --border: #355a66; --red: #e06c75; min-height: 100vh; margin: 0; display: grid; place-items: center; background: radial-gradient(circle at 75% 20%, color-mix(in srgb, var(--border) 20%, transparent), transparent 42%), var(--bg); color: var(--fg); font-family: 'Fira Code', ui-monospace, SFMono-Regular, Consolas, monospace; }
-.login-page * { box-sizing: border-box; }
-.login-shell { position: relative; z-index: 1; width: min(860px, calc(100% - 32px)); display: grid; grid-template-columns: 1fr 1fr; border: 1px solid color-mix(in srgb, var(--fg) 12%, transparent); border-radius: 10px; overflow: hidden; box-shadow: 0 24px 80px rgb(0 0 0 / 28%); }
-.login-brand { min-height: 390px; padding: 42px; display: flex; flex-direction: column; justify-content: flex-end; background: var(--panel); border-right: 1px solid var(--border); }
-.login-brand span { color: var(--red); font-size: 27px; }
+/* Approved split auth composition, built from Odysseus tokens and controls. */
+.login-page {
+  --bg: #282c34;
+  --fg: #9cdef2;
+  --panel: #111;
+  --border: #355a66;
+  --red: #e06c75;
+  min-height: 100vh;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 75% 20%, color-mix(in srgb, var(--border) 20%, transparent), transparent 42%),
+    var(--bg);
+  color: var(--fg);
+  font-family: 'Fira Code', ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.login-page * {
+  box-sizing: border-box;
+}
+
+.login-shell {
+  position: relative;
+  z-index: 1;
+  width: min(860px, calc(100% - 32px));
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 1px solid color-mix(in srgb, var(--fg) 12%, transparent);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 24px 80px rgb(0 0 0 / 28%);
+}
+
+.login-brand {
+  min-height: 390px;
+  padding: 42px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+}
+
+.login-brand span {
+  color: var(--red);
+  font-size: 27px;
+}
+
 .login-brand small,
-.login-page .muted { margin-top: 8px; color: #828997; }
-.login-card { padding: 42px; background: color-mix(in srgb, var(--bg) 87%, var(--panel)); }
-.login-card .eyebrow { margin: 0; color: var(--red); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
-.login-card h1 { margin: 8px 0; font-size: 22px; }
-.login-card form { display: grid; gap: 8px; margin-top: 26px; }
-.login-card label { margin-top: 8px; color: #828997; font-size: 10px; }
-.login-card input { min-height: 40px; padding: 9px 11px; color: var(--fg); background: color-mix(in srgb, var(--bg) 72%, black); border: 1px solid var(--border); border-radius: 7px; }
-.login-card button { min-height: 40px; margin-top: 12px; color: var(--fg); background: color-mix(in srgb, var(--red) 16%, var(--panel)); border: 1px solid color-mix(in srgb, var(--red) 50%, var(--border)); border-radius: 7px; cursor: pointer; }
+.login-page .muted {
+  margin-top: 8px;
+  color: #828997;
+}
+
+.login-card {
+  padding: 42px;
+  background: color-mix(in srgb, var(--bg) 87%, var(--panel));
+}
+
+.login-card .eyebrow {
+  margin: 0;
+  color: var(--red);
+  font-size: 10px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.login-card h1 {
+  margin: 8px 0;
+  font-size: 22px;
+}
+
+.login-card form {
+  display: grid;
+  gap: 8px;
+  margin-top: 26px;
+}
+
+.login-card label {
+  margin-top: 8px;
+  color: #828997;
+  font-size: 10px;
+}
+
+.login-card input {
+  min-height: 40px;
+}
+
+.login-card button {
+  min-height: 40px;
+  margin-top: 12px;
+}
 
 @media (max-width: 900px) {
-  .grid { grid-template-columns: 1fr; }
-  .calendar-grid { overflow-x: auto; }
+  .duesoon-dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .duesoon-card-wide {
+    grid-column: auto;
+  }
 }
 
 @media (max-width: 720px) {
-  .workspace-content { padding: 14px; }
-  .login-shell { grid-template-columns: 1fr; }
-  .login-brand { min-height: auto; padding: 24px; border-right: 0; border-bottom: 1px solid var(--border); }
-  .login-card { padding: 28px 24px; }
+  .workspace-content {
+    padding: 14px;
+  }
+
+  .login-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .login-brand {
+    min-height: auto;
+    padding: 24px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .login-card {
+    padding: 28px 24px;
+  }
 }

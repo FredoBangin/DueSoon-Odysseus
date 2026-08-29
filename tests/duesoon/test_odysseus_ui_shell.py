@@ -40,23 +40,81 @@ def test_scoped_due_soon_css_does_not_replace_inherited_shell() -> None:
     css = read("css/app.css")
 
     assert ".workspace-content" in css
-    assert ".grid" in css
-    assert ".panel" in css
+    assert ".duesoon-dashboard-grid" in css
     assert ".login-shell" in css
-    for broad_selector in ("\nbody {", "\n.sidebar {", "\n.icon-rail {", "\n.chat-container {"):
+    for broad_selector in (
+        "\nbody {",
+        "\n.sidebar {",
+        "\n.icon-rail {",
+        "\n.chat-container {",
+        "\n.admin-card {",
+        "\n.cal-event-item {",
+        "\n.cal-quickadd-row {",
+        "\n.confirm-btn {",
+    ):
         assert broad_selector not in css
 
 
 def test_home_keeps_approved_two_column_briefing_and_embedded_assistant() -> None:
     source = read("js/views/home.js")
 
-    assert 'node("div","","grid")' in source
-    assert 'node("article","","panel wide")' in source
-    assert 'node("h2","Ask DueSoon")' in source
-    assert 'list("Urgent",data.urgent)' in source
-    assert 'list("Upcoming",data.upcoming)' in source
-    assert 'list("Missing or overdue"' in source
-    assert 'list("Recently completed"' in source
+    for inherited_class in (
+        "admin-card",
+        "cal-event-item",
+        "cal-event-dot",
+        "cal-event-info",
+        "cal-event-name",
+        "cal-event-time",
+        "cal-event-tag",
+        "cal-quickadd-row",
+        "cal-quickadd-input",
+        "cal-quickadd-hint",
+    ):
+        assert inherited_class in source
+    assert 'assignmentList("Urgent", data.urgent)' in source
+    assert 'assignmentList("Upcoming", data.upcoming)' in source
+    assert 'assignmentList("Missing or overdue"' in source
+    assert 'assignmentList("Recently completed"' in source
+    assert 'node("button", "Ask")' not in source
+
+
+def test_sidebar_uses_exact_odysseus_section_elements_and_animations() -> None:
+    html = read("index.html")
+    shell = read("js/odysseus-shell.js")
+
+    assert '<span class="section-title" data-section-toggle="academic-items"' in html
+    assert '<span class="section-title" data-section-toggle="retained-items"' in html
+    assert html.count('class="section-icon"') >= 2
+    assert html.count('class="sidebar-action-icon"') >= 10
+    assert 'class="chat-container duesoon-workspace"' in html
+    assert "welcome-active" not in html
+    assert "section-just-expanded" in shell
+    assert "section-just-collapsing" in shell
+
+
+def test_settings_uses_native_odysseus_modal_tabs_and_controls() -> None:
+    html = read("index.html")
+    app = read("js/app.js")
+    foundations = read("js/views/foundations.js")
+
+    assert 'class="modal hidden" id="settings-modal"' in html
+    assert 'class="modal-content settings-modal-content"' in html
+    assert 'class="settings-layout"' in html
+    assert 'class="settings-sidebar"' in html
+    assert 'class="settings-panels" id="settings-content"' in html
+    assert html.count("settings-nav-item") >= 2
+    for inherited_class in (
+        "admin-toggle-row",
+        "admin-toggle-label",
+        "admin-switch",
+        "admin-slider",
+        "settings-label",
+        "settings-input",
+        "confirm-btn confirm-btn-primary",
+    ):
+        assert inherited_class in foundations
+    assert "renderSettings(settingsRoot)" in app
+    assert "renderSettings(root)" not in app
 
 
 def test_curated_shell_excludes_unsupported_odysseus_chrome() -> None:
