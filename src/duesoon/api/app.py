@@ -116,6 +116,11 @@ def create_app(
             core_canvas_sync,
             CanvasContentSyncService(owned_canvas_client, runtime_sessions),
             evidence=runtime_evidence_pipeline,
+            evidence_retry_seconds=runtime_settings.evidence_retry_seconds,
+            should_extract=lambda: (
+                runtime_model_settings.effective().enabled
+                and runtime_model_settings.effective().configured
+            ),
         )
     owned_notification_publisher: NtfyPublisher | None = None
     runtime_notification_publisher = notification_publisher

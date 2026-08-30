@@ -1975,7 +1975,9 @@ failure-isolated so Google or model failure cannot prevent Canvas synchronizatio
 evaluation, or immediate submission rechecks. Calendar refresh reconciles events removed from the
 fetched window; Gmail versions remain idempotent and queued extraction remains bounded. Failed
 model extraction uses a configurable one-hour default retry backoff while read-only source capture
-continues, preventing provider rate-limit loops from consuming credits or delaying reminders.
+continues. The same gate applies to Canvas content extraction while canonical Canvas assignment and
+submission sync continues. Provider rate-limit loops therefore cannot consume repeated credits or
+delay reminders.
 
 Effort estimates may use assignment type, course-relative value, instructions, modules, files,
 professor communications, historical outcomes, and owner corrections. AI may propose structured

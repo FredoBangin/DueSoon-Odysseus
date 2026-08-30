@@ -32,6 +32,7 @@ class DueSoonSettings(BaseSettings):
     daily_digest_enabled: bool = True
     daily_digest_hour: int = Field(default=8, ge=0, le=23)
     daily_digest_max_items: int = Field(default=5, ge=1, le=10)
+    evidence_retry_seconds: int = Field(default=3600, ge=900, le=86400)
     api_token: SecretStr | None = None
 
     web_enabled: bool = False

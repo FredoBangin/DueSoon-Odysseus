@@ -82,6 +82,9 @@ selected over material alternatives.
   the fetched window. Failed model extraction enters a one-hour default backoff while source
   capture continues, preventing rate-limit loops. Gmail remains read-only evidence; Calendar
   remains read-only availability.
+- Canvas content enrichment applies the same extraction gate and retry backoff. Canonical Canvas
+  assignment/submission sync always runs, even when the model is disabled, unavailable, or rate
+  limited.
 - General answers can use the model without granting unrestricted tool, filesystem, secret, or
   network access.
 - Automatic learning requires an append-only audit event and a reversible current-state projection.

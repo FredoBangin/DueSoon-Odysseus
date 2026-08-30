@@ -61,4 +61,43 @@ def test_optional_evidence_failure_never_stops_core_sync() -> None:
     result = service.sync()
 
     assert result.name == "core"
-    assert service.last_evidence_summary == {"status": "failed"}
+    assert service.last_evidence_summary == {"status": "failed_backoff"}
+
+
+def test_failed_evidence_waits_for_backoff_while_core_sync_continues() -> None:
+    current = [0.0]
+    core, content, evidence = Core(), Content(), Evidence(fail=True)
+    service = CanvasAcademicSync(
+        core,
+        content,
+        evidence=evidence,
+        content_interval_seconds=1800,
+        evidence_retry_seconds=3600,
+        monotonic=lambda: current[0],
+    )
+
+    service.sync()
+    current[0] = 1801
+    service.sync()
+    current[0] = 3601
+    service.sync()
+
+    assert core.calls == 3
+    assert content.calls == 3
+    assert evidence.calls == 2
+
+
+def test_disabled_model_extraction_does_not_call_evidence_pipeline() -> None:
+    core, content, evidence = Core(), Content(), Evidence()
+    service = CanvasAcademicSync(
+        core,
+        content,
+        evidence=evidence,
+        should_extract=lambda: False,
+    )
+
+    service.sync()
+
+    assert core.calls == content.calls == 1
+    assert evidence.calls == 0
+    assert service.last_evidence_summary == {"status": "disabled"}
