@@ -13,7 +13,7 @@ from src.duesoon.reminders.checkpoints import (
 )
 from src.duesoon.canvas.sync import CanvasSyncService
 from src.duesoon.config.settings import DueSoonSettings
-from src.duesoon.notifications.ntfy import PublishResult
+from src.duesoon.notifications.ntfy import NtfyPublishError, PublishResult
 from src.duesoon.notifications.service import NotificationService
 from src.duesoon.persistence.database import (
     create_engine_from_settings,
@@ -162,6 +162,14 @@ class ReminderPublisher:
         return PublishResult(provider_message_id="provider-reminder-1")
 
 
+class RetryPublisher(ReminderPublisher):
+    def publish(self, **payload: object) -> PublishResult:
+        self.calls.append(payload)
+        if len(self.calls) == 1:
+            raise NtfyPublishError("ntfy rate limited request", retryable=True)
+        return PublishResult(provider_message_id="provider-reminder-retry")
+
+
 def build_reminder_service(
     tmp_path: Path,
     *,
@@ -170,6 +178,7 @@ def build_reminder_service(
     refresh_state: str = "unsubmitted",
     dry_run: bool = False,
     daily_digest_enabled: bool = False,
+    publisher: ReminderPublisher | None = None,
 ):
     settings = DueSoonSettings(
         _env_file=None,
@@ -188,7 +197,7 @@ def build_reminder_service(
     sessions = session_factory(engine)
     canvas = ReminderCanvasClient(due_at, refresh_state)
     sync = CanvasSyncService(canvas, sessions, clock=lambda: now_ref[0])
-    publisher = ReminderPublisher()
+    publisher = publisher or ReminderPublisher()
     notifications = NotificationService(settings, sessions, publisher)
     service = ReminderService(
         sessions,
@@ -258,6 +267,33 @@ def test_incomplete_assignment_sends_once_after_immediate_recheck(tmp_path: Path
         assert second.sent == 0
         assert canvas.refresh_calls == 1
         assert len(publisher.calls) == 1
+    finally:
+        engine.dispose()
+
+
+def test_retryable_delivery_rechecks_canvas_again_before_retry(tmp_path: Path) -> None:
+    now_ref = [datetime(2026, 8, 27, 12, 0, tzinfo=UTC)]
+    retry_publisher = RetryPublisher()
+    engine, sessions, canvas, publisher, service = build_reminder_service(
+        tmp_path,
+        now_ref=now_ref,
+        due_at=now_ref[0] + timedelta(hours=5),
+        publisher=retry_publisher,
+    )
+    try:
+        with pytest.raises(NtfyPublishError):
+            service.run_once()
+        now_ref[0] += timedelta(minutes=1)
+        recovered = service.run_once()
+
+        with sessions() as session:
+            event = session.scalar(select(ReminderEvent))
+            delivery = session.scalar(select(NotificationDelivery))
+            assert event is not None and event.status == "sent"
+            assert delivery is not None and delivery.status == "sent"
+        assert recovered.sent == 1
+        assert canvas.refresh_calls == 2
+        assert len(publisher.calls) == 2
     finally:
         engine.dispose()
 

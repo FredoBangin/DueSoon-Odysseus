@@ -65,3 +65,32 @@ def test_publish_error_does_not_leak_token_topic_or_response_body() -> None:
     assert "private-student-topic" not in rendered
     assert "private provider details" not in rendered
     assert "status 500" in rendered
+    assert captured.value.ambiguous is True
+    assert captured.value.retryable is False
+
+
+def test_rate_limit_is_retryable_but_timeout_is_ambiguous() -> None:
+    rate_limited = NtfyPublisher(
+        build_settings(),
+        client=httpx.Client(
+            transport=httpx.MockTransport(
+                lambda _request: httpx.Response(429, text="private details")
+            )
+        ),
+    )
+    with pytest.raises(NtfyPublishError) as limited:
+        rate_limited.publish(title="Test", message="Test message")
+    assert limited.value.retryable is True
+    assert limited.value.ambiguous is False
+
+    def timeout(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("private timeout", request=request)
+
+    timed_out = NtfyPublisher(
+        build_settings(),
+        client=httpx.Client(transport=httpx.MockTransport(timeout)),
+    )
+    with pytest.raises(NtfyPublishError) as unknown:
+        timed_out.publish(title="Test", message="Test message")
+    assert unknown.value.ambiguous is True
+    assert unknown.value.retryable is False

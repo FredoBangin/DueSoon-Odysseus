@@ -17,3 +17,8 @@ Twilio is an optional future adapter and is not required for the first release.
 - SQLite must not be placed on Azure Files or another network file share.
 - Horizontal application scaling is not allowed while the in-process scheduler and SQLite are used.
 - Live delivery cannot be enabled until ntfy authentication, HTTPS, persistence, and the iPhone subscription are verified.
+- Provider HTTP 429 and pre-delivery connection failures are retryable using the existing delivery
+  intent. Every reminder retry still performs a fresh Canvas submission recheck first. Timeouts,
+  other uncertain request failures, and HTTP 5xx responses remain `unknown` and are not retried
+  automatically because duplicate iPhone pushes would be possible. Permanent HTTP 4xx responses
+  remain failed and deduplicated.

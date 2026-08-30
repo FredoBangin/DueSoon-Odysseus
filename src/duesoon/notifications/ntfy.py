@@ -12,9 +12,16 @@ from src.duesoon.config.settings import DueSoonSettings
 class NtfyPublishError(RuntimeError):
     """Sanitized provider error safe to expose through the API."""
 
-    def __init__(self, message: str, *, ambiguous: bool = False) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        ambiguous: bool = False,
+        retryable: bool = False,
+    ) -> None:
         super().__init__(message)
         self.ambiguous = ambiguous
+        self.retryable = retryable
 
 
 @dataclass(frozen=True)
@@ -73,11 +80,27 @@ class NtfyPublisher:
                 "ntfy request timed out; delivery outcome is unknown",
                 ambiguous=True,
             ) from exc
+        except httpx.ConnectError as exc:
+            raise NtfyPublishError(
+                "ntfy connection failed before delivery",
+                retryable=True,
+            ) from exc
         except httpx.RequestError as exc:
-            raise NtfyPublishError("ntfy request failed before confirmation") from exc
+            raise NtfyPublishError(
+                "ntfy request failed; delivery outcome is unknown",
+                ambiguous=True,
+            ) from exc
 
         if not response.is_success:
-            raise NtfyPublishError(f"ntfy rejected request with status {response.status_code}")
+            if response.status_code == 429:
+                raise NtfyPublishError(
+                    "ntfy rejected request with status 429",
+                    retryable=True,
+                )
+            raise NtfyPublishError(
+                f"ntfy rejected request with status {response.status_code}",
+                ambiguous=response.status_code >= 500,
+            )
 
         try:
             provider_id = response.json().get("id")

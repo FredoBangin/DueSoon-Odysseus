@@ -84,32 +84,40 @@ class NotificationService:
                     NotificationDelivery.dedup_key == idempotency_key
                 )
             )
-            if existing is not None:
+            if existing is not None and existing.status != "retry_scheduled":
                 return self._existing_result(existing)
 
-            delivery = NotificationDelivery(
-                dedup_key=idempotency_key,
-                notification_kind=notification_kind,
-                status="pending",
-                rendered_title=title,
-                rendered_body=message,
-                priority=priority,
-                provider="ntfy",
-                attempted_at=utc_now(),
-            )
-            session.add(delivery)
-            try:
+            if existing is not None:
+                delivery = existing
+                delivery.status = "pending"
+                delivery.error_code = None
+                delivery.attempted_at = utc_now()
+                delivery.completed_at = None
                 session.commit()
-            except IntegrityError:
-                session.rollback()
-                existing = session.scalar(
-                    select(NotificationDelivery).where(
-                        NotificationDelivery.dedup_key == idempotency_key
-                    )
+            else:
+                delivery = NotificationDelivery(
+                    dedup_key=idempotency_key,
+                    notification_kind=notification_kind,
+                    status="pending",
+                    rendered_title=title,
+                    rendered_body=message,
+                    priority=priority,
+                    provider="ntfy",
+                    attempted_at=utc_now(),
                 )
-                if existing is None:
-                    raise
-                return self._existing_result(existing)
+                session.add(delivery)
+                try:
+                    session.commit()
+                except IntegrityError:
+                    session.rollback()
+                    existing = session.scalar(
+                        select(NotificationDelivery).where(
+                            NotificationDelivery.dedup_key == idempotency_key
+                        )
+                    )
+                    if existing is None:
+                        raise
+                    return self._existing_result(existing)
 
             if self._settings.dry_run:
                 delivery.status = "dry_run"
@@ -132,8 +140,16 @@ class NotificationService:
                     tags=tags,
                 )
             except NtfyPublishError as exc:
-                delivery.status = "unknown" if exc.ambiguous else "failed"
-                delivery.error_code = "ambiguous_timeout" if exc.ambiguous else "provider_error"
+                delivery.status = (
+                    "unknown"
+                    if exc.ambiguous
+                    else "retry_scheduled" if exc.retryable else "failed"
+                )
+                delivery.error_code = (
+                    "ambiguous_outcome"
+                    if exc.ambiguous
+                    else "provider_transient" if exc.retryable else "provider_error"
+                )
                 delivery.completed_at = utc_now()
                 session.commit()
                 raise
