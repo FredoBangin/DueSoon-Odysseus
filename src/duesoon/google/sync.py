@@ -45,6 +45,7 @@ class GoogleWorkspaceSyncService:
         *,
         should_extract: Callable[[], bool] = lambda: False,
         interval_seconds: int = 900,
+        extraction_retry_seconds: int = 3600,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         self.sessions = sessions
@@ -54,7 +55,9 @@ class GoogleWorkspaceSyncService:
         self.pipeline = pipeline
         self.should_extract = should_extract
         self.interval_seconds = max(300, interval_seconds)
+        self.extraction_retry_seconds = max(900, extraction_retry_seconds)
         self.clock = clock
+        self._extraction_retry_at: datetime | None = None
 
     def run_once(self) -> dict[str, Any]:
         now = _utc(self.clock())
@@ -86,15 +89,28 @@ class GoogleWorkspaceSyncService:
                 window_end=end,
             )
 
-        if self.should_extract():
+        if (
+            self.should_extract()
+            and self._extraction_retry_at is not None
+            and now < self._extraction_retry_at
+        ):
+            result["extraction"] = {"status": "skipped_backoff"}
+        elif self.should_extract():
             try:
                 summary = self.pipeline.process_pending(limit=10)
                 result["extraction"] = summary.to_dict()
-            except Exception:
+                self._extraction_retry_at = None
+            except Exception as exc:
                 # Source capture remains successful. Ingested records stay queued for
                 # the next bounded extraction cycle.
-                logger.exception("automatic academic evidence extraction failed")
-                result["extraction"] = {"status": "failed"}
+                self._extraction_retry_at = now + timedelta(
+                    seconds=self.extraction_retry_seconds
+                )
+                logger.warning(
+                    "automatic academic evidence extraction failed; backoff active (%s)",
+                    type(exc).__name__,
+                )
+                result["extraction"] = {"status": "failed_backoff"}
 
         with self.sessions() as session:
             state = session.get(SchedulerState, STATE_KEY)

@@ -165,6 +165,9 @@ def create_app(
             interval_seconds=int(
                 getattr(runtime_google.config, "sync_interval_seconds", 900)
             ),
+            extraction_retry_seconds=int(
+                getattr(runtime_google.config, "extraction_retry_seconds", 3600)
+            ),
         )
     runtime_assistant = AssistantService(
         runtime_sessions,

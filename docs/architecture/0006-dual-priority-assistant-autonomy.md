@@ -79,7 +79,9 @@ selected over material alternatives.
 - Connected Gmail and Google Calendar readers run as isolated auxiliary work inside the single
   scheduler. Their persisted interval watermark prevents unnecessary provider calls, their failure
   cannot block Canvas reminder evaluation, and calendar refresh reconciles removed events within
-  the fetched window. Gmail remains read-only evidence; Calendar remains read-only availability.
+  the fetched window. Failed model extraction enters a one-hour default backoff while source
+  capture continues, preventing rate-limit loops. Gmail remains read-only evidence; Calendar
+  remains read-only availability.
 - General answers can use the model without granting unrestricted tool, filesystem, secret, or
   network access.
 - Automatic learning requires an append-only audit event and a reversible current-state projection.

@@ -1973,7 +1973,9 @@ When Google Workspace is connected, the single scheduler automatically refreshes
 evidence and Google Calendar availability on a persisted interval. This auxiliary refresh is
 failure-isolated so Google or model failure cannot prevent Canvas synchronization, reminder
 evaluation, or immediate submission rechecks. Calendar refresh reconciles events removed from the
-fetched window; Gmail versions remain idempotent and queued extraction remains bounded.
+fetched window; Gmail versions remain idempotent and queued extraction remains bounded. Failed
+model extraction uses a configurable one-hour default retry backoff while read-only source capture
+continues, preventing provider rate-limit loops from consuming credits or delaying reminders.
 
 Effort estimates may use assignment type, course-relative value, instructions, modules, files,
 professor communications, historical outcomes, and owner corrections. AI may propose structured

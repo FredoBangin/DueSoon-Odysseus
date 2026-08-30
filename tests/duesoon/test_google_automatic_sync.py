@@ -29,6 +29,7 @@ class GoogleClient:
     def __init__(self) -> None:
         self.gmail_calls = 0
         self.calendar_calls = 0
+        self.calendar_windows = []
 
     def list_gmail_messages(self, *, query: str, limit: int):
         self.gmail_calls += 1
@@ -43,8 +44,7 @@ class GoogleClient:
 
     def list_calendar_events(self, *, start: datetime, end: datetime, limit: int = 250):
         self.calendar_calls += 1
-        assert start == NOW - timedelta(days=1)
-        assert end == NOW + timedelta(days=60)
+        self.calendar_windows.append((start, end))
         return [{
             "id": "shift-1",
             "title": "Private work shift",
@@ -63,6 +63,15 @@ class Pipeline:
         self.calls += 1
         assert limit == 10
         return SimpleNamespace(to_dict=lambda: {"processed_sources": 1})
+
+
+class FailingPipeline:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def process_pending(self, *, limit: int):
+        self.calls += 1
+        raise RuntimeError("provider rate limited")
 
 
 def database(tmp_path: Path):
@@ -99,6 +108,9 @@ def test_google_sync_runs_read_only_sources_and_persists_watermark(tmp_path: Pat
         assert first["calendar"]["stored"] == 1
         assert second["status"] == "skipped_interval"
         assert client.gmail_calls == client.calendar_calls == pipeline.calls == 1
+        assert client.calendar_windows == [
+            (NOW - timedelta(days=1), NOW + timedelta(days=60))
+        ]
         with sessions() as session:
             assert session.scalar(select(SourceRecord.id)) is not None
             block = session.scalar(select(CalendarBusyBlock))
@@ -133,5 +145,39 @@ def test_calendar_window_reconciliation_deactivates_removed_events(tmp_path: Pat
             block = session.scalar(select(CalendarBusyBlock))
             assert block is not None and block.active is False
         assert result["deactivated"] == 1
+    finally:
+        engine.dispose()
+
+
+def test_extraction_failure_uses_backoff_without_blocking_source_refresh(
+    tmp_path: Path,
+) -> None:
+    engine, sessions = database(tmp_path)
+    current = [NOW]
+    client = GoogleClient()
+    pipeline = FailingPipeline()
+    service = GoogleWorkspaceSyncService(
+        sessions,
+        client,
+        GoogleEvidenceService(sessions),
+        GoogleCalendarEvidenceService(sessions),
+        pipeline,
+        should_extract=lambda: True,
+        interval_seconds=900,
+        extraction_retry_seconds=3600,
+        clock=lambda: current[0],
+    )
+    try:
+        first = service.run_once()
+        current[0] += timedelta(seconds=901)
+        second = service.run_once()
+        current[0] += timedelta(seconds=2700)
+        third = service.run_once()
+
+        assert first["extraction"] == {"status": "failed_backoff"}
+        assert second["extraction"] == {"status": "skipped_backoff"}
+        assert third["extraction"] == {"status": "failed_backoff"}
+        assert pipeline.calls == 2
+        assert client.gmail_calls == client.calendar_calls == 3
     finally:
         engine.dispose()
