@@ -255,3 +255,80 @@ def test_browser_evidence_routes_require_session_and_csrf(tmp_path: Path) -> Non
     assert confirmed.json()["created"] is True
     assert confirmed.json()["inspection"]["assignment_id"] == assignment_id
     assert "private_excerpt" not in inspected.text + confirmed.text
+
+
+def test_browser_owner_can_attach_sanitized_gmail_claim_to_assignment(
+    tmp_path: Path,
+) -> None:
+    client, engine = build(tmp_path)
+    observed = datetime(2026, 8, 28, 12, tzinfo=UTC)
+    candidate_due = observed + timedelta(days=2)
+    with client:
+        with session_factory(engine)() as session:
+            course = Course(canvas_course_id="42", name="Network Security")
+            assignment = Assignment(
+                canvas_assignment_id="99",
+                course=course,
+                canonical_title="Midterm Test",
+                canvas_due_at=None,
+                published=True,
+                first_seen_at=observed,
+                last_seen_at=observed,
+            )
+            source = SourceRecord(
+                source_system="gmail",
+                source_type="message",
+                external_id="gmail-midterm",
+                course_id=None,
+                source_published_at=observed,
+                observed_at=observed,
+                content_hash="gmail-midterm-hash",
+                raw_payload={"body": "private professor email body"},
+            )
+            claim = Claim(
+                source_record=source,
+                claim_type="deadline_is",
+                assignment_hint="Midterm Test",
+                normalized_value={
+                    "due_at": candidate_due.isoformat(),
+                    "precision": "exact_datetime",
+                },
+                source_locator="private professor sentence",
+                author_identity="professor@example.edu",
+                author_role="email_sender_unverified",
+                source_published_at=observed,
+                source_observed_at=observed,
+                extraction_method="fixture",
+                extractor_version="claims-v1",
+                extraction_confidence=0.95,
+                validation_status="validated",
+                claim_fingerprint="gmail-midterm-claim",
+            )
+            session.add_all([assignment, claim])
+            session.commit()
+            assignment_id, claim_id = assignment.id, claim.id
+
+        csrf = login(client)
+        path = f"/api/v1/dashboard/review/evidence/{claim_id}/confirm-assignment"
+        assert client.post(path, json={"assignment_id": assignment_id}).status_code == 403
+        review = client.get("/api/v1/dashboard/review")
+        confirmed = client.post(
+            path,
+            headers={"X-CSRF-Token": csrf},
+            json={"assignment_id": assignment_id},
+        )
+
+    assert review.status_code == 200
+    assert review.json()["assignment_options"] == [
+        {
+            "id": assignment_id,
+            "title": "Midterm Test",
+            "course_name": "Network Security",
+        }
+    ]
+    assert confirmed.status_code == 200
+    assert confirmed.json()["status"] == "admitted"
+    combined = review.text + confirmed.text
+    assert "private professor email body" not in combined
+    assert "private professor sentence" not in combined
+    assert "professor@example.edu" not in combined

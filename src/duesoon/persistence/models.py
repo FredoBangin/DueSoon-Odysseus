@@ -264,6 +264,32 @@ class AssignmentProgressObservation(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
+class CalendarBusyBlock(Base):
+    """Sanitized read-only calendar interval; event titles are never persisted."""
+
+    __tablename__ = "calendar_busy_blocks"
+    __table_args__ = (
+        UniqueConstraint(
+            "source_system",
+            "external_id_hash",
+            name="uq_calendar_busy_source_event",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    source_system: Mapped[str] = mapped_column(String(50), default="google_calendar")
+    external_id_hash: Mapped[str] = mapped_column(String(64), index=True)
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    all_day: Mapped[bool] = mapped_column(Boolean, default=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
 class SyncRun(Base):
     __tablename__ = "sync_runs"
 

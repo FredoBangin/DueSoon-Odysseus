@@ -292,6 +292,68 @@ def test_unverified_conversation_correction_stays_reviewable_and_cannot_win(
         engine.dispose()
 
 
+def test_owner_can_attach_validated_gmail_deadline_to_exact_assignment(
+    tmp_path: Path,
+) -> None:
+    engine, sessions = database(tmp_path)
+    try:
+        with sessions() as session:
+            course = Course(canvas_course_id="42", name="Network Security")
+            assignment = Assignment(
+                canvas_assignment_id="99",
+                course=course,
+                canonical_title="Lab 4",
+                canvas_due_at=OLD_DUE,
+                canvas_updated_at=PUBLISHED - timedelta(days=1),
+                published=True,
+                first_seen_at=PUBLISHED,
+                last_seen_at=PUBLISHED,
+            )
+            source = SourceRecord(
+                source_system="gmail",
+                source_type="message",
+                external_id="gmail-1",
+                course_id=None,
+                source_published_at=PUBLISHED,
+                observed_at=PUBLISHED,
+                content_hash="gmail-1-hash",
+                version=1,
+                raw_payload={
+                    "subject": "Lab 4 deadline",
+                    "from": "Professor <professor@example.edu>",
+                    "body": CORRECTION,
+                },
+            )
+            session.add_all([assignment, source])
+            session.commit()
+            assignment_id = assignment.id
+
+        summary = CanvasEvidencePipeline(
+            sessions,
+            RecordingExtractor((correction_claim(),)),
+        ).process_pending()
+        with sessions() as session:
+            claim_id = session.scalar(select(Claim.id))
+
+        assert summary.evidence_created == 0
+        confirmed = EvidenceReviewService(sessions).confirm_assignment(
+            claim_id,
+            assignment_id,
+        )
+
+        assert confirmed["status"] == "admitted"
+        assert confirmed["owner_confirmed"] is True
+        inspection = EvidenceInspectionService(sessions).inspect(assignment_id)
+        assert inspection.effective_due_at == NEW_DUE
+        with sessions() as session:
+            evidence = session.scalar(select(AssignmentEvidence))
+            assert evidence is not None
+            assert evidence.author_verified is True
+            assert evidence.disposition == "admitted"
+    finally:
+        engine.dispose()
+
+
 def test_processed_source_is_idempotent_and_does_not_call_model_twice(
     tmp_path: Path,
 ) -> None:

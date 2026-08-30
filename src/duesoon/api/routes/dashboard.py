@@ -1,6 +1,6 @@
 """Browser-session-only dashboard APIs."""
 
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 import logging
 from typing import Annotated
 
@@ -36,6 +36,10 @@ class ReviewActionRequest(BaseModel):
     action: str
     edited_text: str | None = Field(default=None, max_length=2000)
     reason: str | None = Field(default=None, max_length=1000)
+
+
+class EvidenceAssignmentConfirmationRequest(BaseModel):
+    assignment_id: int = Field(ge=1)
 
 
 class ModelSettingsRequest(BaseModel):
@@ -104,6 +108,7 @@ def calendar(request: Request, start: date, end: date):
                 start=datetime.combine(start, time.min, tzinfo=UTC),
                 end=datetime.combine(end, time.max, tzinfo=UTC),
             )
+            request.app.state.calendar_evidence.store_events(external)
             for item in external:
                 starts_at = str(item.get("starts_at") or "")
                 local_date = starts_at[:10]
@@ -126,6 +131,10 @@ def calendar(request: Request, start: date, end: date):
             value["events"].sort(key=lambda item: str(item["starts_at"]))
         except GoogleAPIError:
             value["google_calendar_status"] = "unavailable"
+    value["availability"] = request.app.state.calendar_evidence.summary(
+        start=datetime.combine(start, time.min, tzinfo=UTC),
+        end=datetime.combine(end + timedelta(days=1), time.min, tzinfo=UTC),
+    )
     return value
 
 
@@ -325,11 +334,32 @@ def review(request: Request):
         "enabled": True,
         "items": request.app.state.learning.list_proposals(),
         "evidence_items": request.app.state.evidence_review.list_pending(),
+        "assignment_options": request.app.state.evidence_review.assignment_options(),
         "message": (
             "Review unresolved evidence and learning proposals. Protected academic state "
             "changes still require validated evidence or owner confirmation."
         ),
     }
+
+
+@router.post(
+    "/review/evidence/{claim_id}/confirm-assignment",
+    dependencies=[Depends(require_csrf)],
+)
+def confirm_evidence_assignment(
+    claim_id: int,
+    payload: EvidenceAssignmentConfirmationRequest,
+    request: Request,
+):
+    try:
+        return request.app.state.evidence_review.confirm_assignment(
+            claim_id,
+            payload.assignment_id,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post("/review/{proposal_id}", dependencies=[Depends(require_csrf)])

@@ -54,6 +54,7 @@ export async function renderReview(root){
   const value=await get("/api/v1/dashboard/review");root.replaceChildren();
   const intro=node("article","",card);intro.append(node("h2","Learning review"),node("p",value.message,muted));root.append(intro);
   const evidenceItems=value.evidence_items||[];
+  const assignmentOptions=value.assignment_options||[];
   if(evidenceItems.length){
     root.append(node("h2","Academic evidence to review"));
     for(const item of evidenceItems){
@@ -62,7 +63,16 @@ export async function renderReview(root){
       const context=[item.course_name,item.source_type?.replaceAll("_"," "),item.status].filter(Boolean).join(" · ");
       review.append(node("h2",title),node("p",context,muted));
       if(item.candidate_due_at)review.append(node("p",`Candidate deadline: ${new Date(item.candidate_due_at).toLocaleString()}`));
-      review.append(node("p",`${item.claim_type.replaceAll("_"," ")} · ${item.confidence} confidence · ${item.precision} precision`,muted),node("p",item.reason),node("small","Raw source content stays private. Review does not approve or change a deadline.",muted));
+      review.append(node("p",`${item.claim_type.replaceAll("_"," ")} · ${item.confidence} confidence · ${item.precision} precision`,muted),node("p",item.reason),node("small","Raw source content stays private. Nothing changes until you confirm the exact assignment.",muted));
+      if(item.source_type==="message"&&item.status==="unmatched"&&assignmentOptions.length){
+        const controls=node("div","","cal-toolbar");
+        const select=document.createElement("select");select.className="settings-input";
+        for(const option of assignmentOptions){const element=document.createElement("option");element.value=String(option.id);element.textContent=`${option.course_name} · ${option.title}`;select.append(element);}
+        const attach=node("button","Attach verified email date","confirm-btn confirm-btn-primary");attach.type="button";
+        const result=node("span","",muted);
+        attach.onclick=async()=>{attach.disabled=true;try{const claimId=item.id.replace("claim:","");await post(`/api/v1/dashboard/review/evidence/${claimId}/confirm-assignment`,{assignment_id:Number(select.value)});await renderReview(root);}catch(error){result.textContent=error.message;attach.disabled=false;}};
+        controls.append(select,attach,result);review.append(controls);
+      }
       if(item.assignment_id){
         const controls=node("div","","cal-toolbar");
         const inspect=node("button","Review assignment",action),details=node("div","",muted);

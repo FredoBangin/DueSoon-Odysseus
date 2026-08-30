@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 
+from src.duesoon.intelligence.deadline_resolver import source_authority
 from src.duesoon.persistence.models import Assignment, AssignmentEvidence, Claim
 
 
@@ -80,6 +81,113 @@ class EvidenceReviewService:
                     }
                 )
             return values
+
+    def assignment_options(self) -> list[dict[str, Any]]:
+        with self.sessions() as session:
+            assignments = session.scalars(
+                select(Assignment)
+                .options(selectinload(Assignment.course))
+                .where(Assignment.published.is_(True))
+                .order_by(Assignment.course_id, Assignment.canonical_title, Assignment.id)
+            ).all()
+            return [
+                {
+                    "id": item.id,
+                    "title": item.canonical_title,
+                    "course_name": item.course.name,
+                }
+                for item in assignments
+            ]
+
+    def confirm_assignment(self, claim_id: int, assignment_id: int) -> dict[str, Any]:
+        """Admit one validated Gmail claim only after exact owner selection."""
+
+        with self.sessions() as session:
+            claim = session.scalar(
+                select(Claim)
+                .options(selectinload(Claim.source_record))
+                .where(Claim.id == claim_id)
+            )
+            if claim is None:
+                raise LookupError("claim not found")
+            assignment = session.get(Assignment, assignment_id)
+            if assignment is None:
+                raise LookupError("assignment not found")
+            if claim.validation_status != "validated":
+                raise ValueError("only validated claims can be confirmed")
+            source = claim.source_record
+            if source.source_system != "gmail" or source.source_type != "message":
+                raise ValueError("only Gmail claims use owner assignment confirmation")
+            if not isinstance(claim.normalized_value, dict):
+                raise ValueError("claim value is invalid")
+
+            existing_admitted = session.scalar(
+                select(AssignmentEvidence).where(
+                    AssignmentEvidence.claim_id == claim_id,
+                    AssignmentEvidence.disposition == "admitted",
+                    AssignmentEvidence.assignment_id != assignment_id,
+                )
+            )
+            if existing_admitted is not None:
+                raise ValueError("claim is already admitted to another assignment")
+            link = session.scalar(
+                select(AssignmentEvidence).where(
+                    AssignmentEvidence.claim_id == claim_id,
+                    AssignmentEvidence.assignment_id == assignment_id,
+                )
+            )
+            precision = claim.normalized_value.get("precision", "unknown")
+            if not isinstance(precision, str):
+                precision = "unknown"
+            explanation = (
+                f"Owner confirmed Gmail claim belongs to {assignment.canonical_title}; "
+                "raw email remains private."
+            )
+            if link is None:
+                link = AssignmentEvidence(
+                    assignment_id=assignment_id,
+                    claim_id=claim_id,
+                    course_match_score=1.0,
+                    assignment_match_score=1.0,
+                    authority_score=source_authority("professor_email_correction"),
+                    explicitness_score=1.0,
+                    precision=precision,
+                    owner_confirmed=True,
+                    author_verified=True,
+                    source_current=True,
+                    recency_features={
+                        "source_published_at": (
+                            source.source_published_at.isoformat()
+                            if source.source_published_at else None
+                        )
+                    },
+                    corroboration_features={"owner_assignment_confirmation": True},
+                    disposition="admitted",
+                    explanation=explanation,
+                )
+                session.add(link)
+            else:
+                link.course_match_score = 1.0
+                link.assignment_match_score = 1.0
+                link.authority_score = source_authority("professor_email_correction")
+                link.explicitness_score = 1.0
+                link.precision = precision
+                link.owner_confirmed = True
+                link.author_verified = True
+                link.source_current = True
+                link.corroboration_features = {"owner_assignment_confirmation": True}
+                link.disposition = "admitted"
+                link.explanation = explanation
+            session.commit()
+            session.refresh(link)
+            return {
+                "claim_id": claim_id,
+                "assignment_id": assignment_id,
+                "evidence_id": link.id,
+                "status": link.disposition,
+                "owner_confirmed": link.owner_confirmed,
+                "explanation": link.explanation,
+            }
 
 
 def _confidence(value: float) -> str:

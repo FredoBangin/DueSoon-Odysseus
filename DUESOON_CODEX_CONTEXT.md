@@ -1949,6 +1949,12 @@ outcomes to trigger occasional owner questions about time spent, then combine co
 progress observations, and calendar availability. Learned capacity remains confidence-scored,
 reviewable, and reversible and does not change deadlines or checkpoint reminder policy.
 
+Google Calendar availability persistence is privacy-minimized. DueSoon stores read-only busy
+intervals, all-day flags, observation times, and hashed provider event identifiers. It does not
+persist event titles or descriptions in planning tables. Busy intervals can identify shift-heavy
+days and days without known blocks, but they do not prove total usable school capacity; exact
+start-by calculations remain unknown until sufficient owner-confirmed outcome evidence exists.
+
 Effort estimates may use assignment type, course-relative value, instructions, modules, files,
 professor communications, historical outcomes, and owner corrections. AI may propose structured
 effort, progress, alias, and workload interpretations with confidence and provenance. Deterministic
