@@ -1962,6 +1962,13 @@ persist event titles or descriptions in planning tables. Busy intervals can iden
 days and days without known blocks, but they do not prove total usable school capacity; exact
 start-by calculations remain unknown until sufficient owner-confirmed outcome evidence exists.
 
+Professor-to-course identity is owner-controlled. DueSoon stores a one-way hash of the normalized
+exact email plus a masked display label; ordinary API responses and identity projections never
+return the plaintext address. A verified sender may automatically scope future Gmail evidence only
+when the sender maps to exactly one active course. If one sender maps to multiple courses, matching
+remains unresolved. Course documents and syllabi may propose a professor identity, but the proposal
+must be confirmed in Review before it affects Gmail matching or source authority.
+
 Effort estimates may use assignment type, course-relative value, instructions, modules, files,
 professor communications, historical outcomes, and owner corrections. AI may propose structured
 effort, progress, alias, and workload interpretations with confidence and provenance. Deterministic

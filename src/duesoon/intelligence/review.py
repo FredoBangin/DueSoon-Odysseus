@@ -8,7 +8,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 
 from src.duesoon.intelligence.deadline_resolver import source_authority
-from src.duesoon.persistence.models import Assignment, AssignmentEvidence, Claim
+from src.duesoon.persistence.models import Assignment, AssignmentEvidence, Claim, Course
 
 
 class EvidenceReviewService:
@@ -52,6 +52,8 @@ class EvidenceReviewService:
                 link = links[0] if links else None
                 assignment = link.assignment if link else None
                 course = assignment.course if assignment else None
+                if course is None and claim.source_record.course_id is not None:
+                    course = session.get(Course, claim.source_record.course_id)
                 due_at = claim.normalized_value.get("due_at")
                 precision = claim.normalized_value.get(
                     "precision", link.precision if link else "unknown"

@@ -42,6 +42,11 @@ class EvidenceAssignmentConfirmationRequest(BaseModel):
     assignment_id: int = Field(ge=1)
 
 
+class ProfessorIdentityRequest(BaseModel):
+    course_id: int = Field(ge=1)
+    email: str = Field(min_length=3, max_length=320)
+
+
 class ModelSettingsRequest(BaseModel):
     enabled: bool | None = None
     primary_model: str | None = Field(default=None, max_length=255)
@@ -356,6 +361,38 @@ def confirm_evidence_assignment(
             claim_id,
             payload.assignment_id,
         )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post(
+    "/review/evidence/{claim_id}/confirm-professor",
+    dependencies=[Depends(require_csrf)],
+)
+def confirm_professor_claim(claim_id: int, request: Request):
+    try:
+        return request.app.state.professors.confirm_claim(claim_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/professors")
+def professors(request: Request):
+    service = request.app.state.professors
+    return {
+        "items": service.list_verified(),
+        "course_options": service.course_options(),
+    }
+
+
+@router.post("/professors", dependencies=[Depends(require_csrf)])
+def verify_professor(payload: ProfessorIdentityRequest, request: Request):
+    try:
+        return request.app.state.professors.verify(**payload.model_dump())
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:

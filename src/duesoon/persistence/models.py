@@ -290,6 +290,36 @@ class CalendarBusyBlock(Base):
     )
 
 
+class CourseInstructorIdentity(Base):
+    """Owner-verified sender-to-course binding with no plaintext email storage."""
+
+    __tablename__ = "course_instructor_identities"
+    __table_args__ = (
+        UniqueConstraint(
+            "course_id",
+            "email_hash",
+            name="uq_course_instructor_email",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    course_id: Mapped[int] = mapped_column(
+        ForeignKey("courses.id", ondelete="CASCADE"), index=True
+    )
+    email_hash: Mapped[str] = mapped_column(String(64), index=True)
+    sender_label: Mapped[str] = mapped_column(String(255))
+    source_kind: Mapped[str] = mapped_column(String(50))
+    source_claim_id: Mapped[int | None] = mapped_column(
+        ForeignKey("claims.id", ondelete="RESTRICT"), index=True
+    )
+    owner_confirmed: Mapped[bool] = mapped_column(Boolean, default=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
 class SyncRun(Base):
     __tablename__ = "sync_runs"
 

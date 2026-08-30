@@ -67,6 +67,7 @@ from src.duesoon.intelligence.pipeline import (
     StructuredClaimExtractor,
 )
 from src.duesoon.intelligence.review import EvidenceReviewService
+from src.duesoon.intelligence.identity import ProfessorIdentityService
 from src.duesoon.reminders.scheduler import ReminderScheduler
 from src.duesoon.reminders.service import ReminderService
 from src.duesoon.retained import RetainedToolsService
@@ -135,6 +136,7 @@ def create_app(
     runtime_diagnostics = DiagnosticsService(runtime_settings, runtime_sessions)
     runtime_evidence = EvidenceInspectionService(runtime_sessions)
     runtime_evidence_review = EvidenceReviewService(runtime_sessions)
+    runtime_professors = ProfessorIdentityService(runtime_sessions)
     runtime_learning = LearningService(runtime_sessions)
     runtime_retained = RetainedToolsService(runtime_sessions)
     runtime_google_evidence = GoogleEvidenceService(runtime_sessions)
@@ -222,6 +224,7 @@ def create_app(
     application.state.diagnostics = runtime_diagnostics
     application.state.evidence = runtime_evidence
     application.state.evidence_review = runtime_evidence_review
+    application.state.professors = runtime_professors
     application.state.assistant = runtime_assistant
     application.state.learning = runtime_learning
     application.state.retained = runtime_retained

@@ -120,6 +120,8 @@ def test_settings_uses_native_odysseus_modal_tabs_and_controls() -> None:
         assert inherited_class in foundations
     assert "renderSettings(settingsRoot)" in app
     assert "renderSettings(root)" not in app
+    assert "/api/v1/dashboard/professors" in foundations
+    assert "Verified professor senders" in foundations
 
 
 def test_curated_shell_excludes_unsupported_odysseus_chrome() -> None:
@@ -173,6 +175,7 @@ def test_review_surfaces_sanitized_academic_evidence_without_approval_controls()
     assert "value.assignment_options" in source
     assert "/confirm-assignment" in source
     assert "Attach verified email date" in source
+    assert "/confirm-professor" in source
     assert "item.created_by" in source
     assert "item.audit" in source
     assert '["approved","rejected"].includes(item.status)' in source

@@ -20,6 +20,7 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from src.duesoon.intelligence.deadline_resolver import source_authority
+from src.duesoon.intelligence.identity import normalize_email, verified_sender_course
 from src.duesoon.intelligence.matcher import (
     HIGH_MATCH,
     AssignmentHint,
@@ -49,6 +50,7 @@ CLAIM_TYPES = frozenset(
         "submission_instruction",
         "assignment_alias",
         "course_meeting_time",
+        "professor_identity",
     }
 )
 DEADLINE_CLAIM_TYPES = frozenset(
@@ -149,7 +151,9 @@ class StructuredClaimExtractor:
                     "a time or timezone. For workload_hint, normalized_value must contain integer "
                     "estimated_minutes, lower_minutes, and upper_minutes between 5 and 10080, "
                     "ordered lower <= estimated <= upper. Return an empty claims array when no "
-                    "supported claim exists."
+                    "supported claim exists. For professor_identity, normalized_value must contain "
+                    "the exact professor email found in the course source; this claim always "
+                    "requires owner confirmation before sender authority changes."
                 ),
             },
             {
@@ -269,8 +273,9 @@ class CanvasEvidencePipeline:
                 source = session.get(SourceRecord, source_id)
                 if source is None:
                     continue
-                course = session.get(Course, source.course_id) if source.course_id else None
-                candidates = _assignment_references(session, source.course_id)
+                resolved_course_id = source_text.course_id
+                course = session.get(Course, resolved_course_id) if resolved_course_id else None
+                candidates = _assignment_references(session, resolved_course_id)
                 for value in extracted[:10]:
                     validation_status = _validate_claim(value, source_text)
                     claim, created = _store_claim(
@@ -290,7 +295,7 @@ class CanvasEvidencePipeline:
 
                     match = match_assignment(
                         AssignmentHint(
-                            course_id=source.course_id,
+                            course_id=resolved_course_id,
                             assignment_hint=value.assignment_hint,
                             canvas_assignment_id=(
                                 source_text.exact_canvas_assignment_id
@@ -325,7 +330,7 @@ class CanvasEvidencePipeline:
                         AssignmentEvidence(
                             assignment_id=match.assignment_id,
                             claim=claim,
-                            course_match_score=1.0 if source.course_id else 0.0,
+                            course_match_score=1.0 if resolved_course_id else 0.0,
                             assignment_match_score=match.score,
                             authority_score=source_authority(SOURCE_KIND[source.source_type]),
                             explicitness_score=EXPLICITNESS[value.explicitness],
@@ -429,15 +434,23 @@ def _source_text(session: Session, source: SourceRecord) -> CanvasSourceText:
                 _plain(payload.get("snippet")),
             )
         )
-        author_identity = _plain(payload.get("from")) or None
+        sender = payload.get("from")
+        author_identity = str(sender).strip()[:500] if isinstance(sender, str) and sender.strip() else None
         author_role = "email_sender_unverified"
 
-    course = session.get(Course, source.course_id) if source.course_id else None
+    resolved_course_id = source.course_id
+    if source.source_type == "message" and source.source_system == "gmail":
+        verified_course_id = verified_sender_course(session, author_identity)
+        if verified_course_id is not None:
+            resolved_course_id = verified_course_id
+            author_role = "owner_verified_professor"
+            author_verified = True
+    course = session.get(Course, resolved_course_id) if resolved_course_id else None
     text = "\n".join(item for item in parts if item)[:12000]
     return CanvasSourceText(
         source_record_id=source.id,
         source_type=source.source_type,
-        course_id=source.course_id,
+        course_id=resolved_course_id,
         course_canvas_id=course.canvas_course_id if course else None,
         text=text,
         source_published_at=source.source_published_at,
@@ -483,6 +496,14 @@ def _validate_claim(value: AcademicClaim, source: CanvasSourceText) -> str:
         ):
             return "rejected"
         if not lower <= estimate <= upper:
+            return "rejected"
+    if value.claim_type == "professor_identity":
+        email = value.normalized_value.get("email")
+        if not isinstance(email, str):
+            return "rejected"
+        try:
+            normalize_email(email)
+        except ValueError:
             return "rejected"
     return "validated"
 

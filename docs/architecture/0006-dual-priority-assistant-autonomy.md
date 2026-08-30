@@ -71,6 +71,11 @@ selected over material alternatives.
   remaining-effort pace. Due-next ordering stays chronological; work-next ordering uses priority.
 - Calendar planning stores privacy-minimized busy intervals and hashed event identifiers, not event
   titles or descriptions. A day without known blocks is not automatically treated as fully free.
+- Professor-to-course identity requires owner confirmation. DueSoon stores a normalized-email
+  hash and masked display label, never the plaintext address in the identity projection. A verified
+  sender may auto-scope future Gmail evidence only when it maps to exactly one course; ambiguous
+  cross-course senders remain unresolved. Syllabus extraction may propose an identity but cannot
+  confirm it.
 - General answers can use the model without granting unrestricted tool, filesystem, secret, or
   network access.
 - Automatic learning requires an append-only audit event and a reversible current-state projection.

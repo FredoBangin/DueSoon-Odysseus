@@ -64,6 +64,13 @@ export async function renderReview(root){
       review.append(node("h2",title),node("p",context,muted));
       if(item.candidate_due_at)review.append(node("p",`Candidate deadline: ${new Date(item.candidate_due_at).toLocaleString()}`));
       review.append(node("p",`${item.claim_type.replaceAll("_"," ")} · ${item.confidence} confidence · ${item.precision} precision`,muted),node("p",item.reason),node("small","Raw source content stays private. Nothing changes until you confirm the exact assignment.",muted));
+      if(item.claim_type==="professor_identity"&&item.status==="unmatched"&&item.course_name){
+        const controls=node("div","","cal-toolbar");
+        const verify=node("button","Verify professor for course","confirm-btn confirm-btn-primary");verify.type="button";
+        const result=node("span","",muted);
+        verify.onclick=async()=>{verify.disabled=true;try{const claimId=item.id.replace("claim:","");await post(`/api/v1/dashboard/review/evidence/${claimId}/confirm-professor`,{});await renderReview(root);}catch(error){result.textContent=error.message;verify.disabled=false;}};
+        controls.append(verify,result);review.append(controls);
+      }
       if(item.source_type==="message"&&item.status==="unmatched"&&assignmentOptions.length){
         const controls=node("div","","cal-toolbar");
         const select=document.createElement("select");select.className="settings-input";
@@ -111,7 +118,7 @@ export async function renderReview(root){
 }
 
 export async function renderSettings(root){
-  const [value,model]=await Promise.all([get("/api/v1/dashboard/settings"),get("/api/v1/dashboard/model-settings")]);
+  const [value,model,professors]=await Promise.all([get("/api/v1/dashboard/settings"),get("/api/v1/dashboard/model-settings"),get("/api/v1/dashboard/professors")]);
   root.replaceChildren();
   document.querySelectorAll("[data-duesoon-settings-tab]").forEach(button=>button.classList.toggle("active",button.dataset.duesoonSettingsTab==="connections"));
 
@@ -127,6 +134,22 @@ export async function renderSettings(root){
     connections.append(row);
   }
   connectionsPanel.append(connections);
+
+  const professorForm=node("form","",card);
+  professorForm.append(
+    node("h2","Verified professor senders"),
+    node("p","Link an exact professor email to one course. DueSoon stores a one-way hash and returns only a masked address. Gmail can then scope future evidence to that course.",muted),
+  );
+  const professorCourse=document.createElement("select");professorCourse.className="settings-input";
+  for(const option of professors.course_options||[]){const element=document.createElement("option");element.value=String(option.id);element.textContent=option.name;professorCourse.append(element);}
+  const professorEmail=document.createElement("input");professorEmail.className="settings-input";professorEmail.type="email";professorEmail.required=true;professorEmail.maxLength=320;professorEmail.placeholder="Professor email";
+  const professorSave=node("button","Verify sender","confirm-btn confirm-btn-primary");professorSave.type="submit";
+  const professorResult=node("p","",muted);
+  professorForm.append(node("label","Course","settings-label"),professorCourse,node("label","Professor email","settings-label"),professorEmail,professorSave,professorResult);
+  professorForm.onsubmit=async event=>{event.preventDefault();professorSave.disabled=true;try{await post("/api/v1/dashboard/professors",{course_id:Number(professorCourse.value),email:professorEmail.value});await renderSettings(root);}catch(error){professorResult.textContent=error.message;professorSave.disabled=false;}};
+  for(const item of professors.items||[]){professorForm.append(node("p",`${item.course_name} · ${item.sender} · verified`,muted));}
+  if(!(professors.course_options||[]).length){professorCourse.disabled=true;professorEmail.disabled=true;professorSave.disabled=true;professorResult.textContent="Sync Canvas courses before adding professor senders.";}
+  connectionsPanel.append(professorForm);
 
   const assistantPanel=node("section","","hidden");
   assistantPanel.dataset.settingsPanel="assistant";
