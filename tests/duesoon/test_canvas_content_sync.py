@@ -16,6 +16,8 @@ from src.duesoon.persistence.models import Course, SourceRecord
 
 
 class AcademicContentStub:
+    downloads = 0
+
     def list_conversations(self, *, scope: str = "inbox"):
         assert scope == "inbox"
         return [{"id": 1, "subject": "Lab moved"}]
@@ -39,7 +41,21 @@ class AcademicContentStub:
         return [{"id": 5, "title": "Lab", "type": "Assignment"}]
 
     def list_files(self, course_id: str):
-        return [{"id": 6, "display_name": "syllabus.pdf"}]
+        return [{
+            "id": 6,
+            "display_name": "syllabus.txt",
+            "filename": "syllabus.txt",
+            "content-type": "text/plain",
+            "size": 36,
+            "updated_at": "2026-08-27T12:00:00Z",
+            "url": "https://school.instructure.com/files/6/download?verifier=secret",
+        }]
+
+    def download_file(self, url: str, *, max_bytes: int):
+        assert "verifier=secret" in url
+        assert max_bytes >= 36
+        self.downloads += 1
+        return b"Final project due Monday at 9:00 AM"
 
     def list_pages(self, course_id: str):
         return [{"url": "week-1"}]
@@ -61,8 +77,9 @@ def test_content_sync_is_append_only_and_idempotent(tmp_path: Path) -> None:
         session.add(Course(canvas_course_id="42", name="Biology", active=True))
         session.commit()
 
+    reader = AcademicContentStub()
     service = CanvasContentSyncService(
-        AcademicContentStub(),
+        reader,
         sessions,
         clock=lambda: datetime(2026, 8, 28, tzinfo=UTC),
     )
@@ -72,6 +89,7 @@ def test_content_sync_is_append_only_and_idempotent(tmp_path: Path) -> None:
     assert first.records_seen == 6
     assert first.source_versions_created == 6
     assert second.source_versions_created == 0
+    assert reader.downloads == 1
     with sessions() as session:
         assert session.scalar(select(func.count()).select_from(SourceRecord)) == 6
         conversation = session.scalar(
@@ -80,6 +98,15 @@ def test_content_sync_is_append_only_and_idempotent(tmp_path: Path) -> None:
         assert conversation is not None
         assert conversation.course_id is not None
         assert conversation.raw_payload["messages"][0]["body"] == "Due Friday"
+        file_record = session.scalar(
+            select(SourceRecord).where(SourceRecord.source_type == "file")
+        )
+        assert file_record is not None
+        assert file_record.raw_payload["extracted_text"] == (
+            "Final project due Monday at 9:00 AM"
+        )
+        assert "url" not in file_record.raw_payload
+        assert "verifier=secret" not in str(file_record.raw_payload)
 
 
 def test_conversation_course_matching_accepts_direct_canvas_context() -> None:

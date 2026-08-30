@@ -15,7 +15,7 @@ from src.duesoon.persistence.models import AcademicMemory, AcademicNote, Course,
 
 
 SOURCE_TYPES = frozenset(
-    {"assignment", "conversation", "announcement", "page", "module", "module_item", "message"}
+    {"assignment", "conversation", "announcement", "page", "module", "module_item", "file", "message"}
 )
 STOP_WORDS = frozenset(
     {
@@ -75,7 +75,7 @@ def _tokens(value: str) -> set[str]:
 def _source_text(source: SourceRecord) -> str:
     payload = source.raw_payload if isinstance(source.raw_payload, dict) else {}
     values: list[str] = []
-    for key in ("title", "subject", "name", "display_name", "description", "message", "body", "content", "snippet"):
+    for key in ("title", "subject", "name", "display_name", "description", "message", "body", "content", "snippet", "extracted_text"):
         value = _plain(payload.get(key))
         if value:
             values.append(value)

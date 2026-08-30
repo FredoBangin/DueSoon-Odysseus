@@ -238,6 +238,37 @@ def test_exact_assignment_instruction_becomes_admitted_deadline_evidence(
         engine.dispose()
 
 
+def test_extracted_course_file_text_enters_verified_evidence_pipeline(
+    tmp_path: Path,
+) -> None:
+    engine, sessions = database(tmp_path)
+    try:
+        assignment_id = seed(
+            sessions,
+            source_type="file",
+            raw_payload={
+                "display_name": "Lab 4 instructions.pdf",
+                "extracted_text": CORRECTION,
+                "extraction": {"status": "extracted", "locator_scheme": "pdf_page"},
+            },
+        )
+        extractor = RecordingExtractor((correction_claim(),))
+
+        summary = CanvasEvidencePipeline(sessions, extractor).process_pending()
+
+        assert summary.evidence_created == 1
+        assert summary.needs_review == 0
+        assert extractor.calls[0].text == f"Lab 4 instructions.pdf\n{CORRECTION}"
+        assert extractor.calls[0].author_role == "official_course_file_channel"
+        assert extractor.calls[0].author_verified is True
+        inspection = EvidenceInspectionService(sessions).inspect(assignment_id)
+        assert inspection.deadline_status == "conflicted"
+        assert inspection.operational_due_at == OLD_DUE
+        assert NEW_DUE in inspection.conflicting_due_at
+    finally:
+        engine.dispose()
+
+
 def test_unverified_conversation_correction_stays_reviewable_and_cannot_win(
     tmp_path: Path,
 ) -> None:

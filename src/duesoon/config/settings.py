@@ -56,6 +56,7 @@ class DueSoonSettings(BaseSettings):
     canvas_access_token: SecretStr | None = None
     canvas_timeout_seconds: float = Field(default=15.0, gt=0, le=120)
     canvas_max_attempts: int = Field(default=3, ge=1, le=5)
+    canvas_file_max_bytes: int = Field(default=8_000_000, ge=1024, le=25_000_000)
 
     @model_validator(mode="after")
     def validate_runtime_invariants(self) -> "DueSoonSettings":

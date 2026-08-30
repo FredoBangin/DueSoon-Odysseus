@@ -62,7 +62,7 @@ DEADLINE_CLAIM_TYPES = frozenset(
     }
 )
 CANVAS_SOURCE_TYPES = frozenset(
-    {"assignment", "conversation", "announcement", "module", "module_item", "page"}
+    {"assignment", "conversation", "announcement", "module", "module_item", "page", "file"}
 )
 SOURCE_KIND = {
     "assignment": "canvas_assignment",
@@ -71,6 +71,7 @@ SOURCE_KIND = {
     "page": "assignment_instructions",
     "module": "canvas_module",
     "module_item": "canvas_module",
+    "file": "instructor_document",
     "message": "professor_email_correction",
 }
 CONFIDENCE = {"high": 0.90, "medium": 0.75, "low": 0.50}
@@ -426,6 +427,12 @@ def _source_text(session: Session, source: SourceRecord) -> CanvasSourceText:
         parts.extend((_plain(payload.get("title")), _plain(payload.get("content"))))
         if str(payload.get("type", "")).casefold() == "assignment" and payload.get("content_id"):
             exact_assignment_id = str(payload["content_id"])
+    elif source.source_type == "file":
+        parts.extend(
+            (_plain(payload.get("display_name")), _plain(payload.get("extracted_text")))
+        )
+        author_role = "official_course_file_channel"
+        author_verified = True
     elif source.source_type == "message" and source.source_system == "gmail":
         parts.extend(
             (

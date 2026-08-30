@@ -132,6 +132,60 @@ class CanvasClient:
             params={"per_page": 100, "sort": "updated_at", "order": "desc"},
         )
 
+    def download_file(self, url: str, *, max_bytes: int) -> bytes:
+        """Download one bounded same-origin Canvas file without following redirects."""
+
+        self._assert_same_origin(url)
+        for attempt in range(self._max_attempts):
+            retry_delay: float | None = None
+            try:
+                with self._client.stream(
+                    "GET", url, headers={"Accept": "application/octet-stream"}
+                ) as response:
+                    if 300 <= response.status_code < 400:
+                        raise CanvasAPIError(
+                            "Canvas file download redirect rejected",
+                            status_code=response.status_code,
+                        )
+                    if response.status_code in self._RETRYABLE_STATUS:
+                        if attempt + 1 == self._max_attempts:
+                            raise CanvasAPIError(
+                                f"Canvas request failed with HTTP {response.status_code}",
+                                status_code=response.status_code,
+                            )
+                        retry_delay = self._retry_delay(response, attempt)
+                    elif response.status_code >= 400:
+                        raise CanvasAPIError(
+                            f"Canvas request failed with HTTP {response.status_code}",
+                            status_code=response.status_code,
+                        )
+                    else:
+                        content_length = response.headers.get("Content-Length")
+                        if content_length:
+                            try:
+                                if int(content_length) > max_bytes:
+                                    raise CanvasAPIError(
+                                        "Canvas file exceeds size limit"
+                                    )
+                            except ValueError:
+                                pass
+                        value = bytearray()
+                        for chunk in response.iter_bytes():
+                            value.extend(chunk)
+                            if len(value) > max_bytes:
+                                raise CanvasAPIError("Canvas file exceeds size limit")
+                        return bytes(value)
+            except CanvasAPIError:
+                raise
+            except httpx.RequestError as exc:
+                if attempt + 1 == self._max_attempts:
+                    raise CanvasAPIError("Canvas request failed") from exc
+                retry_delay = 0.5 * (2**attempt)
+            if retry_delay is not None:
+                self._sleep(retry_delay)
+
+        raise CanvasAPIError("Canvas request failed")
+
     def list_pages(self, course_id: str) -> list[dict[str, Any]]:
         """Return course wiki-page metadata."""
         return self._paginate(

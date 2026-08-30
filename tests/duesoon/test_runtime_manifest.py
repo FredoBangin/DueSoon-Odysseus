@@ -21,6 +21,7 @@ def test_runtime_requirements_are_foundation_only() -> None:
         "fastapi==0.141.1",
         "httpx==0.28.1",
         "pydantic-settings==2.15.0",
+        "pypdf==6.16.2",
         "SQLAlchemy==2.0.52",
         "uvicorn==0.52.4",
     }

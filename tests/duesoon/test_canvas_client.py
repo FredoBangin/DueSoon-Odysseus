@@ -170,3 +170,46 @@ def test_error_never_contains_access_token() -> None:
 
     assert "canvas-secret" not in str(caught.value)
     assert caught.value.status_code == 401
+
+
+def test_download_file_accepts_only_bounded_same_origin_content() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/files/6/download"
+        assert request.headers["Authorization"] == "Bearer canvas-secret"
+        return httpx.Response(200, content=b"course instructions")
+
+    client = CanvasClient(settings(), transport=httpx.MockTransport(handler))
+    try:
+        assert client.download_file(
+            "https://school.instructure.com/files/6/download", max_bytes=100
+        ) == b"course instructions"
+        with pytest.raises(CanvasAPIError, match="cross-origin"):
+            client.download_file("https://evil.example/file", max_bytes=100)
+    finally:
+        client.close()
+
+
+def test_download_file_rejects_oversized_or_redirected_content() -> None:
+    def oversized(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"too large")
+
+    client = CanvasClient(settings(), transport=httpx.MockTransport(oversized))
+    try:
+        with pytest.raises(CanvasAPIError, match="size limit"):
+            client.download_file(
+                "https://school.instructure.com/files/6/download", max_bytes=4
+            )
+    finally:
+        client.close()
+
+    def redirected(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(302, headers={"Location": "https://cdn.example/file"})
+
+    client = CanvasClient(settings(), transport=httpx.MockTransport(redirected))
+    try:
+        with pytest.raises(CanvasAPIError, match="redirect"):
+            client.download_file(
+                "https://school.instructure.com/files/6/download", max_bytes=100
+            )
+    finally:
+        client.close()

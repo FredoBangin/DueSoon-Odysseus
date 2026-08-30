@@ -13,6 +13,11 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from src.duesoon.canvas.client import CanvasAPIError
+from src.duesoon.documents.extract import (
+    DocumentExtractionError,
+    SUPPORTED_CONTENT_TYPES,
+    extract_document,
+)
 from src.duesoon.persistence.models import Course, SourceRecord
 
 
@@ -28,6 +33,7 @@ class CanvasContentReader(Protocol):
         self, course_id: str, module_id: str
     ) -> list[dict[str, Any]]: ...
     def list_files(self, course_id: str) -> list[dict[str, Any]]: ...
+    def download_file(self, url: str, *, max_bytes: int) -> bytes: ...
     def list_pages(self, course_id: str) -> list[dict[str, Any]]: ...
     def get_page(self, course_id: str, page_url: str) -> dict[str, Any]: ...
 
@@ -53,11 +59,13 @@ class CanvasContentSyncService:
         *,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         announcement_lookback_days: int = 120,
+        file_max_bytes: int = 8_000_000,
     ) -> None:
         self.client = client
         self.sessions = sessions
         self.clock = clock
         self.announcement_lookback_days = announcement_lookback_days
+        self.file_max_bytes = file_max_bytes
 
     def sync(self) -> ContentSyncSummary:
         observed_at = self.clock()
@@ -100,7 +108,7 @@ class CanvasContentSyncService:
 
             for canvas_course_id, course in course_by_canvas_id.items():
                 self._collect_course_content(
-                    canvas_course_id, course.id, records, skipped
+                    session, canvas_course_id, course.id, records, skipped
                 )
 
             created = 0
@@ -126,6 +134,7 @@ class CanvasContentSyncService:
 
     def _collect_course_content(
         self,
+        session: Session,
         canvas_course_id: str,
         course_id: int,
         records: list[tuple[str, str, int | None, dict[str, Any]]],
@@ -161,7 +170,14 @@ class CanvasContentSyncService:
         ):
             external_id = str(item.get("id", ""))
             if external_id:
-                records.append(("file", external_id, course_id, item))
+                records.append((
+                    "file",
+                    external_id,
+                    course_id,
+                    self._course_file_payload(
+                        session, prefix, external_id, item, skipped
+                    ),
+                ))
 
         pages = self._optional(
             f"{prefix}:pages", lambda: self.client.list_pages(canvas_course_id), skipped
@@ -175,6 +191,87 @@ class CanvasContentSyncService:
             except CanvasAPIError:
                 detail = page
             records.append(("page", f"{canvas_course_id}:{page_url}", course_id, detail))
+
+    def _course_file_payload(
+        self,
+        session: Session,
+        prefix: str,
+        external_id: str,
+        item: dict[str, Any],
+        skipped: dict[str, str],
+    ) -> dict[str, Any]:
+        payload = _sanitized_file_metadata(item)
+        revision = _file_revision(item)
+        payload["file_revision"] = revision
+        prior = session.scalar(
+            select(SourceRecord)
+            .where(
+                SourceRecord.source_system == "canvas",
+                SourceRecord.source_type == "file",
+                SourceRecord.external_id == external_id,
+            )
+            .order_by(SourceRecord.version.desc())
+            .limit(1)
+        )
+        if prior is not None and isinstance(prior.raw_payload, dict):
+            extraction = prior.raw_payload.get("extraction")
+            if (
+                prior.raw_payload.get("file_revision") == revision
+                and isinstance(extraction, dict)
+                and extraction.get("status") in {"extracted", "unsupported", "too_large"}
+            ):
+                return dict(prior.raw_payload)
+
+        content_type = str(
+            item.get("content-type") or item.get("content_type") or ""
+        ).split(";", 1)[0].strip().casefold()
+        filename = str(item.get("display_name") or item.get("filename") or "")[:255]
+        size = item.get("size")
+        if content_type not in SUPPORTED_CONTENT_TYPES:
+            payload["extraction"] = {
+                "status": "unsupported", "content_type": content_type
+            }
+            return payload
+        if isinstance(size, int) and size > self.file_max_bytes:
+            payload["extraction"] = {
+                "status": "too_large", "content_type": content_type
+            }
+            return payload
+        url = item.get("url")
+        if not isinstance(url, str) or not url:
+            payload["extraction"] = {"status": "download_unavailable"}
+            skipped[f"{prefix}:file:{external_id}:content"] = "missing_url"
+            return payload
+
+        try:
+            data = self.client.download_file(url, max_bytes=self.file_max_bytes)
+            extracted = extract_document(
+                data,
+                filename=filename,
+                content_type=content_type,
+                max_bytes=self.file_max_bytes,
+            )
+        except CanvasAPIError as exc:
+            payload["extraction"] = {"status": "download_unavailable"}
+            skipped[f"{prefix}:file:{external_id}:content"] = (
+                f"http_{exc.status_code}" if exc.status_code else "unavailable"
+            )
+            return payload
+        except DocumentExtractionError:
+            payload["extraction"] = {
+                "status": "invalid", "content_type": content_type
+            }
+            skipped[f"{prefix}:file:{external_id}:content"] = "invalid_document"
+            return payload
+
+        payload["extracted_text"] = extracted.text
+        payload["extraction"] = {
+            "status": "extracted",
+            "format": extracted.format,
+            "locator_scheme": extracted.locator_scheme,
+            "truncated": extracted.truncated,
+        }
+        return payload
 
     @staticmethod
     def _optional(
@@ -288,3 +385,26 @@ def _source_timestamp(payload: dict[str, Any]) -> datetime | None:
             except ValueError:
                 continue
     return None
+
+
+def _sanitized_file_metadata(payload: dict[str, Any]) -> dict[str, Any]:
+    """Drop signed or preview URLs before academic metadata is persisted."""
+
+    blocked = {"url", "preview_url", "thumbnail_url"}
+    return {key: value for key, value in payload.items() if key not in blocked}
+
+
+def _file_revision(payload: dict[str, Any]) -> str:
+    canonical = json.dumps(
+        {
+            key: payload.get(key)
+            for key in (
+                "id", "uuid", "filename", "display_name", "content-type",
+                "content_type", "size", "updated_at", "modified_at",
+            )
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()

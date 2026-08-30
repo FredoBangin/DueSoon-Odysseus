@@ -114,7 +114,11 @@ def create_app(
         core_canvas_sync = CanvasSyncService(owned_canvas_client, runtime_sessions)
         runtime_canvas_sync = CanvasAcademicSync(
             core_canvas_sync,
-            CanvasContentSyncService(owned_canvas_client, runtime_sessions),
+            CanvasContentSyncService(
+                owned_canvas_client,
+                runtime_sessions,
+                file_max_bytes=runtime_settings.canvas_file_max_bytes,
+            ),
             evidence=runtime_evidence_pipeline,
             evidence_retry_seconds=runtime_settings.evidence_retry_seconds,
             should_extract=lambda: (
