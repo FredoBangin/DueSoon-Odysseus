@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from src.duesoon.api.app import create_app
+from src.duesoon.dashboard.assistant import DeterministicAssistant
 from src.duesoon.assistant.provider import ProviderAnswer
 from src.duesoon.auth.passwords import hash_password
 from src.duesoon.config.settings import DueSoonSettings
@@ -64,6 +65,37 @@ def login(client: TestClient) -> dict[str, str]:
     )
     assert response.status_code == 200
     return {"X-CSRF-Token": response.json()["csrf_token"]}
+
+
+def test_due_next_and_work_next_use_separate_orderings() -> None:
+    project = {
+        "id": 1,
+        "title": "Capstone Project",
+        "course_name": "Course",
+        "external_url": None,
+    }
+    quiz = {
+        "id": 2,
+        "title": "Quiz 2",
+        "course_name": "Course",
+        "external_url": None,
+    }
+    snapshot = {
+        "missing": [],
+        "overdue": [],
+        "urgent": [],
+        "upcoming": [project, quiz],
+        "next_due": [quiz],
+        "freshness": {"canvas_status": "fresh"},
+    }
+
+    due = DeterministicAssistant().answer("What is due next?", snapshot)
+    work = DeterministicAssistant().answer("What should I work on next?", snapshot)
+
+    assert due["intent"] == "due_next"
+    assert "Quiz 2" in due["answer"]
+    assert work["intent"] == "work_next"
+    assert "Capstone Project" in work["answer"]
 
 
 def test_exact_academic_question_uses_deterministic_path_without_model_call(

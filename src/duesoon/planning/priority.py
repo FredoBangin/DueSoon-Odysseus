@@ -150,7 +150,7 @@ def score_work_priority(
             wall_required = round(required * 24 / usable_hours_per_day)
             start_by = due - timedelta(minutes=wall_required)
             assumptions.append(
-                f"Planning uses {usable_hours_per_day:g} usable hours per day; calendar blocks are not applied."
+                f"Learned outcome history supplies {usable_hours_per_day:g} usable school-work hours per day; known calendar blocks remain separate context."
             )
             reasons.append(
                 f"{remaining} estimated work minutes plus {buffer} buffer leave {slack} usable minutes of slack"
@@ -187,7 +187,7 @@ def score_work_priority(
         band = "LATER"
     else:
         band = "MONITOR"
-    confidence = "low"  # Calendar-aware usable time is not implemented yet.
+    confidence = "medium" if usable_hours_per_day is not None else "low"
     return WorkPriorityBreakdown(
         workload_pressure_score=pressure_score,
         due_proximity_score=due_score,

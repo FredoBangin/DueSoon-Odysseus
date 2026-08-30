@@ -15,8 +15,11 @@ class DeterministicAssistant:
         elif any(word in text for word in ("submit", "complete", "everything")):
             intent, items = "completion_check", snapshot["missing"] or snapshot["overdue"]
             answer = "Canvas shows no incomplete overdue work." if not items else f"Not yet—{len(items)} item(s) still need attention."
+        elif any(phrase in text for phrase in ("work on", "start next", "focus on")):
+            intent, items = "work_next", snapshot["upcoming"]
+            answer = "No active work was found." if not items else f"Work next: {items[0]['title']} for {items[0]['course_name']}."
         elif any(word in text for word in ("next", "due")):
-            intent, items = "due_next", snapshot["upcoming"]
+            intent, items = "due_next", snapshot.get("next_due", snapshot["upcoming"])
             answer = "No upcoming dated work was found." if not items else f"Next: {items[0]['title']} for {items[0]['course_name']}."
         elif any(word in text for word in ("update", "going on", "status")):
             intent, items = "status_update", snapshot["urgent"] or snapshot["upcoming"]

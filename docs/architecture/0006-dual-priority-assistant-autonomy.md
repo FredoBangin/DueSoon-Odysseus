@@ -67,6 +67,8 @@ selected over material alternatives.
 - Capacity learning requires more than Canvas submission timestamps. Submission outcomes may trigger
   owner questions about time spent; progress history, confirmed effort, and calendar availability
   can then produce a reviewable, reversible capacity estimate after enough observations exist.
+- Initial learned capacity requires three confirmed completed outcomes and uses their median
+  remaining-effort pace. Due-next ordering stays chronological; work-next ordering uses priority.
 - Calendar planning stores privacy-minimized busy intervals and hashed event identifiers, not event
   titles or descriptions. A day without known blocks is not automatically treated as fully free.
 - General answers can use the model without granting unrestricted tool, filesystem, secret, or

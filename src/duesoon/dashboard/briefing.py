@@ -130,6 +130,10 @@ class BriefingService:
         ]
         incomplete = [v for v in views if v["submission_status"] not in {"submitted", "graded"}]
         due_items = [v for v in incomplete if v["due_at"]]
+        next_due = sorted(
+            due_items,
+            key=lambda value: (str(value["due_at"]), int(value["id"])),
+        )
         due_items.sort(
             key=lambda value: (
                 -int(value["work_priority"]["score"]),
@@ -161,12 +165,14 @@ class BriefingService:
         stale = not synced_at or now - datetime.fromisoformat(synced_at) > timedelta(seconds=self.settings.scheduler_interval_seconds * 2)
         return {
             "generated_at": now.isoformat(), "timezone": self.settings.timezone,
-            "urgent": urgent, "upcoming": due_items[:10], "overdue": overdue,
+            "urgent": urgent, "upcoming": due_items[:10], "next_due": next_due[:10],
+            "overdue": overdue,
             "missing": missing, "completed_recently": completed[:10],
             "deadline_changes": deadline_changes[:10],
             "reminder_counts": reminder_counts,
             "freshness": {"canvas_status": "stale" if stale else "fresh", "last_synced_at": synced_at},
-            "questions": [],
+            "questions": self.planning.learning_questions(),
+            "capacity_learning": self.planning.capacity_learning(),
             "limitations": (
                 []
                 if has_persisted_deadline_evidence

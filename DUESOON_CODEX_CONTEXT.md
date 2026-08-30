@@ -1949,6 +1949,13 @@ outcomes to trigger occasional owner questions about time spent, then combine co
 progress observations, and calendar availability. Learned capacity remains confidence-scored,
 reviewable, and reversible and does not change deadlines or checkpoint reminder policy.
 
+The initial capacity learner requires at least three completed assignments with owner-confirmed
+effort and a dated progress observation. It uses the median confirmed remaining-effort pace per
+elapsed day, exposes sample count and evidence identifiers, and asks for missing effort after Canvas
+records completion. Fewer than three samples leave capacity unknown. Six or more samples may raise
+confidence from medium to high. Capacity changes work-priority start-by planning only; due-next
+answers remain chronologically ordered and reminder timing remains governed by urgency/checkpoints.
+
 Google Calendar availability persistence is privacy-minimized. DueSoon stores read-only busy
 intervals, all-day flags, observation times, and hashed provider event identifiers. It does not
 persist event titles or descriptions in planning tables. Busy intervals can identify shift-heavy

@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from math import ceil
+from statistics import median
 from typing import Any, Sequence
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session, selectinload, sessionmaker
 
 from src.duesoon.assignments.effective import EffectiveAssignment, project_canvas_assignment
 from src.duesoon.intelligence.service import assignment_load_options
@@ -40,6 +41,12 @@ class PlanningService:
         items: Sequence[EffectiveAssignment],
         now: datetime,
     ) -> dict[int, WorkPriorityBreakdown]:
+        capacity = self.capacity_learning()
+        learned_hours = (
+            capacity["learned_minutes_per_day"] / 60
+            if capacity["status"] == "learned"
+            else None
+        )
         with self.sessions() as session:
             records = session.scalars(
                 select(Assignment)
@@ -65,6 +72,7 @@ class PlanningService:
                 efforts.get(item.assignment_id, EffortProjection.unknown()),
                 now,
                 course_value_percentile=percentiles.get(item.assignment_id),
+                usable_hours_per_day=learned_hours,
             )
             for item in items
         }
@@ -173,6 +181,119 @@ class PlanningService:
                 )
             session.commit()
         return self.inspect(assignment_id)
+
+    def capacity_learning(self) -> dict[str, Any]:
+        """Infer conservative school-work pace from confirmed completed outcomes."""
+
+        with self.sessions() as session:
+            assignments = session.scalars(
+                select(Assignment)
+                .options(selectinload(Assignment.submission))
+                .order_by(Assignment.id)
+            ).all()
+            effort_rows = session.scalars(
+                select(AssignmentEffortEstimate)
+                .where(AssignmentEffortEstimate.owner_confirmed.is_(True))
+                .order_by(
+                    AssignmentEffortEstimate.assignment_id,
+                    AssignmentEffortEstimate.created_at,
+                    AssignmentEffortEstimate.id,
+                )
+            ).all()
+            progress_rows = session.scalars(
+                select(AssignmentProgressObservation).order_by(
+                    AssignmentProgressObservation.assignment_id,
+                    AssignmentProgressObservation.created_at,
+                    AssignmentProgressObservation.id,
+                )
+            ).all()
+        efforts = {row.assignment_id: row for row in effort_rows}
+        progress: dict[int, list[AssignmentProgressObservation]] = {}
+        for row in progress_rows:
+            progress.setdefault(row.assignment_id, []).append(row)
+        samples: list[tuple[int, int]] = []
+        for assignment in assignments:
+            submission = assignment.submission
+            effort = efforts.get(assignment.id)
+            if (
+                submission is None
+                or submission.normalized_status.casefold() not in {"submitted", "graded"}
+                or submission.submitted_at is None
+                or effort is None
+            ):
+                continue
+            submitted_at = _utc(submission.submitted_at)
+            observations = [
+                row
+                for row in progress.get(assignment.id, [])
+                if row.percent_complete < 100 and _utc(row.created_at) < submitted_at
+            ]
+            if not observations:
+                continue
+            observation = observations[-1]
+            elapsed_days = max(
+                1,
+                ceil((submitted_at - _utc(observation.created_at)).total_seconds() / 86400),
+            )
+            remaining = ceil(
+                effort.estimated_minutes * (100 - observation.percent_complete) / 100
+            )
+            samples.append((assignment.id, max(1, round(remaining / elapsed_days))))
+
+        enough = len(samples) >= 3
+        return {
+            "status": "learned" if enough else "insufficient_evidence",
+            "sample_count": len(samples),
+            "learned_minutes_per_day": (
+                round(median(value for _, value in samples)) if enough else None
+            ),
+            "confidence": "high" if len(samples) >= 6 else "medium" if enough else "low",
+            "method": "median_confirmed_remaining_effort_per_day",
+            "evidence_ids": [f"capacity-outcome:{assignment_id}" for assignment_id, _ in samples],
+            "affects_deadlines": False,
+            "affects_reminders": False,
+        }
+
+    def learning_questions(self, *, limit: int = 3) -> list[dict[str, Any]]:
+        """Ask for missing effort only after Canvas records completion."""
+
+        with self.sessions() as session:
+            owner_effort_ids = set(
+                session.scalars(
+                    select(AssignmentEffortEstimate.assignment_id).where(
+                        AssignmentEffortEstimate.owner_confirmed.is_(True)
+                    )
+                ).all()
+            )
+            assignments = session.scalars(
+                select(Assignment)
+                .options(
+                    selectinload(Assignment.course),
+                    selectinload(Assignment.submission),
+                )
+                .order_by(Assignment.id.desc())
+            ).all()
+            eligible = [
+                item
+                for item in assignments
+                if item.id not in owner_effort_ids
+                and item.submission is not None
+                and item.submission.normalized_status.casefold() in {"submitted", "graded"}
+                and item.submission.submitted_at is not None
+            ]
+            eligible.sort(
+                key=lambda item: (_utc(item.submission.submitted_at), item.id),
+                reverse=True,
+            )
+            return [
+                {
+                    "assignment_id": item.id,
+                    "title": item.canonical_title,
+                    "course_name": item.course.name,
+                    "prompt": f"About how many minutes did {item.canonical_title} take?",
+                }
+                for item in eligible[: max(1, min(limit, 10))]
+            ]
 
     @staticmethod
     def _latest_effort(session: Session) -> dict[int, AssignmentEffortEstimate]:
@@ -306,3 +427,7 @@ class PlanningService:
             for index, item in enumerate(ordered):
                 values[item.id] = index / (len(ordered) - 1)
         return values
+
+
+def _utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)

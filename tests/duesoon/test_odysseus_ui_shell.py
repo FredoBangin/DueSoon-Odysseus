@@ -77,6 +77,10 @@ def test_home_keeps_approved_two_column_briefing_and_embedded_assistant() -> Non
     assert 'assignmentList("Missing or overdue"' in source
     assert 'assignmentList("Recently completed"' in source
     assert 'node("button", "Ask")' not in source
+    assert "data.questions" in source
+    assert "Help DueSoon learn" in source
+    assert "/planning`" in source
+    assert "About how many minutes" not in source
 
 
 def test_sidebar_uses_exact_odysseus_section_elements_and_animations() -> None:

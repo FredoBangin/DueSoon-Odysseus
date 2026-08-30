@@ -1,8 +1,53 @@
+import {post} from "../api.js";
+
 function node(tag, text, className = "") {
   const element = document.createElement(tag);
   element.className = className;
   element.textContent = text;
   return element;
+}
+
+function learningCard(items) {
+  if (!items?.length) return null;
+  const card = node("article", "", "admin-card duesoon-card-wide");
+  card.append(
+    node("h2", "Help DueSoon learn"),
+    node("p", "Optional completion feedback improves future effort estimates. It never changes deadlines or reminders.", "admin-toggle-sub"),
+  );
+  for (const item of items) {
+    const form = node("form", "", "admin-toggle-row");
+    const copy = node("div", "");
+    copy.append(node("div", item.prompt, "admin-toggle-label"), node("div", item.course_name, "admin-toggle-sub"));
+    const input = document.createElement("input");
+    input.className = "settings-input";
+    input.type = "number";
+    input.min = "5";
+    input.max = "10080";
+    input.required = true;
+    input.placeholder = "Minutes";
+    input.setAttribute("aria-label", `Minutes spent on ${item.title}`);
+    const save = node("button", "Save", "confirm-btn confirm-btn-primary");
+    save.type = "submit";
+    const result = node("span", "", "admin-toggle-sub");
+    form.append(copy, input, save, result);
+    form.onsubmit = async event => {
+      event.preventDefault();
+      save.disabled = true;
+      try {
+        await post(`/api/v1/dashboard/assignments/${item.assignment_id}/planning`, {
+          estimated_minutes: Number(input.value),
+          note: "Owner completion effort estimate",
+        });
+        input.disabled = true;
+        result.textContent = "Saved";
+      } catch (error) {
+        result.textContent = error.message;
+        save.disabled = false;
+      }
+    };
+    card.append(form);
+  }
+  return card;
 }
 
 function dueLabel(item) {
@@ -101,6 +146,8 @@ export function renderHome(root, data, onAsk) {
     assignmentList("Missing or overdue", [...data.missing, ...data.overdue]),
     assignmentList("Recently completed", data.completed_recently),
   );
+  const learning = learningCard(data.questions);
+  if (learning) grid.append(learning);
   root.append(grid);
 }
 
