@@ -29,6 +29,9 @@ class DueSoonSettings(BaseSettings):
     scheduler_enabled: bool = False
     scheduler_workers: int = Field(default=1, ge=1)
     scheduler_interval_seconds: int = Field(default=300, ge=30, le=3600)
+    daily_digest_enabled: bool = True
+    daily_digest_hour: int = Field(default=8, ge=0, le=23)
+    daily_digest_max_items: int = Field(default=5, ge=1, le=10)
     api_token: SecretStr | None = None
 
     web_enabled: bool = False

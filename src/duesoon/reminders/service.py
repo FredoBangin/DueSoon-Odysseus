@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Callable
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -15,14 +16,17 @@ from src.duesoon.assignments.effective import (
     project_canvas_assignment,
 )
 from src.duesoon.canvas.sync import CanvasSyncService
+from src.duesoon.config.settings import DueSoonSettings
 from src.duesoon.notifications.service import NotificationService
 from src.duesoon.persistence.models import (
     Assignment,
     AssignmentEvidence,
     Claim,
+    NotificationDelivery,
     ReminderEvent,
     SchedulerState,
 )
+from src.duesoon.planning import PlanningService
 from src.duesoon.reminders.checkpoints import adaptive_interval_key, crossed_checkpoint
 
 
@@ -45,6 +49,8 @@ class ReminderService:
         canvas_sync: CanvasSyncService,
         notifications: NotificationService,
         *,
+        settings: DueSoonSettings | None = None,
+        planning: PlanningService | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         assignment_projector: Callable[[Assignment], EffectiveAssignment] = (
             project_canvas_assignment
@@ -53,6 +59,8 @@ class ReminderService:
         self._sessions = sessions
         self._canvas_sync = canvas_sync
         self._notifications = notifications
+        self._settings = settings
+        self._planning = planning
         self._clock = clock
         self._assignment_projector = assignment_projector
 
@@ -163,8 +171,88 @@ class ReminderService:
             elif final_status == "dry_run":
                 dry_run += 1
 
+        digest_status = self._send_daily_digest(assignments, now)
+        if digest_status == "sent":
+            sent += 1
+        elif digest_status == "dry_run":
+            dry_run += 1
+
         self._advance_watermark(now)
         return ReminderRunSummary(sent=sent, suppressed=suppressed, dry_run=dry_run)
+
+    def _send_daily_digest(
+        self,
+        assignments: list[tuple[Assignment, EffectiveAssignment]],
+        now: datetime,
+    ) -> str | None:
+        settings = self._settings
+        if settings is None or not settings.daily_digest_enabled:
+            return None
+        try:
+            local_now = now.astimezone(ZoneInfo(settings.timezone))
+        except ZoneInfoNotFoundError:
+            local_now = now
+        if local_now.hour < settings.daily_digest_hour:
+            return None
+        local_day = local_now.date().isoformat()
+        dedup_key = f"daily-digest:{local_day}"
+        with self._sessions() as session:
+            existing = session.scalar(
+                select(NotificationDelivery.id).where(
+                    NotificationDelivery.dedup_key == dedup_key
+                )
+            )
+        if existing is not None:
+            return None
+
+        eligible = [
+            (assignment, effective)
+            for assignment, effective in assignments
+            if assignment.published
+            and effective.operational_due_at is not None
+            and effective.deadline_confidence != "low"
+            and effective.submission_status not in COMPLETED_STATUSES
+        ]
+        if not eligible:
+            return None
+        if self._planning is not None:
+            projected = tuple(effective for _, effective in eligible)
+            priorities = self._planning.priorities(projected, now)
+            eligible.sort(
+                key=lambda value: (
+                    -priorities[value[0].id].total,
+                    _as_utc(value[1].operational_due_at),
+                    value[0].id,
+                )
+            )
+        else:
+            eligible.sort(
+                key=lambda value: (_as_utc(value[1].operational_due_at), value[0].id)
+            )
+        eligible = eligible[: settings.daily_digest_max_items]
+
+        active: list[tuple[Assignment, EffectiveAssignment]] = []
+        for assignment, effective in eligible:
+            status = self._canvas_sync.refresh_submission(assignment.id)
+            if status not in COMPLETED_STATUSES:
+                active.append((assignment, effective))
+        if not active:
+            return None
+
+        lines = []
+        for assignment, effective in active:
+            due = _as_utc(effective.operational_due_at).astimezone(local_now.tzinfo)
+            lines.append(
+                f"{assignment.course.name}: {assignment.canonical_title} · due {due.strftime('%a %I:%M %p').lstrip('0')}"
+            )
+        result = self._notifications.send_reminder(
+            idempotency_key=dedup_key,
+            title="DueSoon daily briefing",
+            message="\n".join(lines)[:1000],
+            priority=3,
+            notification_kind="daily_digest",
+        )
+        return "sent" if result.status in {"sent", "already_sent"} else result.status
 
     def _last_successful_evaluation(self) -> datetime | None:
         with self._sessions() as session:

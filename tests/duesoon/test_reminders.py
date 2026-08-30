@@ -20,7 +20,7 @@ from src.duesoon.persistence.database import (
     create_schema,
     session_factory,
 )
-from src.duesoon.persistence.models import ReminderEvent, SchedulerState
+from src.duesoon.persistence.models import NotificationDelivery, ReminderEvent, SchedulerState
 from src.duesoon.reminders.service import ReminderService
 
 
@@ -169,6 +169,7 @@ def build_reminder_service(
     due_at: datetime,
     refresh_state: str = "unsubmitted",
     dry_run: bool = False,
+    daily_digest_enabled: bool = False,
 ):
     settings = DueSoonSettings(
         _env_file=None,
@@ -179,6 +180,8 @@ def build_reminder_service(
         ntfy_url="https://notify.example.test" if not dry_run else None,
         ntfy_topic="private-topic" if not dry_run else None,
         ntfy_token="ntfy-token" if not dry_run else None,
+        daily_digest_enabled=daily_digest_enabled,
+        daily_digest_hour=8,
     )
     engine = create_engine_from_settings(settings)
     create_schema(engine)
@@ -191,9 +194,45 @@ def build_reminder_service(
         sessions,
         sync,
         notifications,
+        settings=settings,
         clock=lambda: now_ref[0],
     )
     return engine, sessions, canvas, publisher, service
+
+
+def test_daily_digest_sends_once_after_local_hour_with_immediate_recheck(
+    tmp_path: Path,
+) -> None:
+    now_ref = [datetime(2026, 8, 27, 11, 59, tzinfo=UTC)]  # 7:59 AM EDT
+    engine, sessions, canvas, publisher, service = build_reminder_service(
+        tmp_path,
+        now_ref=now_ref,
+        due_at=now_ref[0] + timedelta(days=3),
+        daily_digest_enabled=True,
+    )
+    try:
+        before_hour = service.run_once()
+        now_ref[0] = datetime(2026, 8, 27, 12, 1, tzinfo=UTC)
+        first = service.run_once()
+        second = service.run_once()
+
+        with sessions() as session:
+            delivery = session.scalar(
+                select(NotificationDelivery).where(
+                    NotificationDelivery.notification_kind == "daily_digest"
+                )
+            )
+            assert delivery is not None
+            assert delivery.status == "sent"
+            assert delivery.dedup_key == "daily-digest:2026-08-27"
+            assert "Lab 1" in delivery.rendered_body
+        assert before_hour.sent == 0
+        assert first.sent == 1
+        assert second.sent == 0
+        assert canvas.refresh_calls == 1
+        assert len(publisher.calls) == 1
+    finally:
+        engine.dispose()
 
 
 def test_incomplete_assignment_sends_once_after_immediate_recheck(tmp_path: Path) -> None:

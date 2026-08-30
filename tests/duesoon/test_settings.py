@@ -13,6 +13,9 @@ DUESOON_ENV_VARS = (
     "DUESOON_SCHEDULER_ENABLED",
     "DUESOON_SCHEDULER_WORKERS",
     "DUESOON_SCHEDULER_INTERVAL_SECONDS",
+    "DUESOON_DAILY_DIGEST_ENABLED",
+    "DUESOON_DAILY_DIGEST_HOUR",
+    "DUESOON_DAILY_DIGEST_MAX_ITEMS",
     "DUESOON_API_TOKEN",
     "DUESOON_NTFY_ENABLED",
     "DUESOON_NTFY_URL",
@@ -41,6 +44,9 @@ def test_safe_defaults_are_dry_run_and_single_worker() -> None:
     assert settings.scheduler_enabled is False
     assert settings.scheduler_workers == 1
     assert settings.scheduler_interval_seconds == 300
+    assert settings.daily_digest_enabled is True
+    assert settings.daily_digest_hour == 8
+    assert settings.daily_digest_max_items == 5
     assert settings.ntfy_enabled is False
     assert settings.canvas_enabled is False
     assert settings.canvas_timeout_seconds == 15.0
@@ -52,6 +58,8 @@ def test_environment_values_are_parsed(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DUESOON_DRY_RUN", "false")
     monkeypatch.setenv("DUESOON_SCHEDULER_ENABLED", "true")
     monkeypatch.setenv("DUESOON_SCHEDULER_INTERVAL_SECONDS", "600")
+    monkeypatch.setenv("DUESOON_DAILY_DIGEST_ENABLED", "false")
+    monkeypatch.setenv("DUESOON_DAILY_DIGEST_HOUR", "10")
     monkeypatch.setenv("DUESOON_API_TOKEN", "test-api-token")
     monkeypatch.setenv("DUESOON_CANVAS_ENABLED", "true")
     monkeypatch.setenv("DUESOON_CANVAS_BASE_URL", "https://canvas.example.test")
@@ -67,6 +75,8 @@ def test_environment_values_are_parsed(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.dry_run is False
     assert settings.scheduler_enabled is True
     assert settings.scheduler_interval_seconds == 600
+    assert settings.daily_digest_enabled is False
+    assert settings.daily_digest_hour == 10
     assert settings.api_token is not None
     assert settings.api_token.get_secret_value() == "test-api-token"
 

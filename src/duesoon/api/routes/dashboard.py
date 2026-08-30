@@ -368,7 +368,13 @@ def settings(request: Request):
     google = request.app.state.google
     return {"canvas": {"configured": value.canvas_enabled, "status": "connected" if value.canvas_enabled else "disabled"},
             "notifications": {"configured": value.ntfy_enabled, "status": "connected" if value.ntfy_enabled else "disabled"},
-            "scheduler": {"enabled": value.scheduler_enabled, "interval_seconds": value.scheduler_interval_seconds},
+            "scheduler": {
+                "enabled": value.scheduler_enabled,
+                "interval_seconds": value.scheduler_interval_seconds,
+                "daily_digest_enabled": value.daily_digest_enabled,
+                "daily_digest_hour": value.daily_digest_hour,
+                "daily_digest_max_items": value.daily_digest_max_items,
+            },
             "dry_run": value.dry_run,
             "features": {
                 "model_assistant": "enabled" if model["enabled"] else (

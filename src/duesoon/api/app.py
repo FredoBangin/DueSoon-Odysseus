@@ -170,6 +170,8 @@ def create_app(
             runtime_sessions,
             runtime_canvas_sync,
             runtime_notifications,
+            settings=runtime_settings,
+            planning=runtime_planning,
         )
         runtime_scheduler = ReminderScheduler(
             reminder_service,

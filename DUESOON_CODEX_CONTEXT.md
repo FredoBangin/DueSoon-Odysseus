@@ -938,6 +938,16 @@ cancelled_assignment
 
 Every terminal status must include a reason and timestamps.
 
+### 12.9 Daily academic briefing
+
+DueSoon sends at most one configurable daily academic briefing after the configured local hour.
+This briefing supplements rather than replaces standard or adaptive checkpoint reminders. It lists
+a bounded number of active assignments in deterministic work-priority order. Every included Canvas
+assignment must receive an immediate submission recheck before the briefing is sent; submitted or
+graded work is removed. The delivery uses a database-backed local-date deduplication key such as
+`daily-digest:2026-08-29`, obeys dry-run behavior, and records a `daily_digest` notification kind.
+No briefing is sent when no eligible active work remains.
+
 ---
 
 ## 13. Due-Date Changes and Schedule Reconciliation
