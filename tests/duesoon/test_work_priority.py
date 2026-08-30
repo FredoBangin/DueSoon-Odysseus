@@ -10,7 +10,7 @@ from src.duesoon.assignments.effective import EffectiveAssignment
 from src.duesoon.auth.passwords import hash_password
 from src.duesoon.config.settings import DueSoonSettings
 from src.duesoon.persistence.database import create_engine_from_settings, session_factory
-from src.duesoon.persistence.models import Assignment, Course
+from src.duesoon.persistence.models import Assignment, CalendarBusyBlock, Course
 from src.duesoon.planning import PlanningService
 from src.duesoon.planning.priority import EffortProjection, score_work_priority
 
@@ -83,7 +83,7 @@ def test_large_distant_project_outranks_small_nearer_quiz_by_slack() -> None:
     assert project_score.usable_minutes_until_due is None
     assert project_score.workload_pressure_score > quiz_score.workload_pressure_score
     assert any("capacity" in value.casefold() for value in project_score.assumptions)
-    assert project_score.config_version == "work-priority-v1"
+    assert project_score.config_version == "work-priority-v2"
     assert sum(project_score.factor_breakdown.values()) == project_score.total
 
 
@@ -112,6 +112,45 @@ def test_unknown_effort_is_visible_and_never_invented() -> None:
     assert result.confidence == "low"
     assert result.band == "MONITOR"
     assert "Effort is unknown" in result.reasons
+
+
+def test_known_calendar_blocks_reduce_learned_usable_capacity() -> None:
+    item = effective(1, title="Research Project", due_in=timedelta(days=2))
+
+    open_schedule = score_work_priority(
+        item, (item,), effort(180), NOW, usable_hours_per_day=4
+    )
+    work_shift = score_work_priority(
+        item,
+        (item,),
+        effort(180),
+        NOW,
+        usable_hours_per_day=4,
+        calendar_blocked_minutes=540,
+    )
+
+    assert work_shift.calendar_blocked_minutes == 540
+    assert work_shift.usable_minutes_until_due < open_schedule.usable_minutes_until_due
+    assert work_shift.slack_minutes < open_schedule.slack_minutes
+    assert work_shift.workload_pressure_score > open_schedule.workload_pressure_score
+    assert any("calendar" in reason.casefold() for reason in work_shift.reasons)
+
+
+def test_calendar_blocks_remain_context_when_capacity_is_unknown() -> None:
+    item = effective(1, title="Research Project", due_in=timedelta(days=2))
+
+    result = score_work_priority(
+        item,
+        (item,),
+        effort(480),
+        NOW,
+        calendar_blocked_minutes=540,
+    )
+
+    assert result.calendar_blocked_minutes == 540
+    assert result.usable_minutes_until_due is None
+    assert result.slack_minutes is None
+    assert any("calendar" in reason.casefold() for reason in result.reasons)
 
 
 def test_completed_work_never_ranks_active() -> None:
@@ -182,6 +221,7 @@ def test_briefing_orders_work_by_priority_and_owner_corrections_are_append_only(
     tmp_path: Path,
 ) -> None:
     client, engine = build(tmp_path)
+    runtime_now = datetime.now(UTC)
     with client:
         with session_factory(engine)() as session:
             course = Course(canvas_course_id="course-1", name="Course")
@@ -206,6 +246,17 @@ def test_briefing_orders_work_by_priority_and_owner_corrections_are_append_only(
                 last_seen_at=NOW,
             )
             session.add_all([project, quiz])
+            session.add(
+                CalendarBusyBlock(
+                    source_system="google_calendar",
+                    external_id_hash="a" * 64,
+                    starts_at=runtime_now + timedelta(hours=12),
+                    ends_at=runtime_now + timedelta(hours=20),
+                    all_day=False,
+                    active=True,
+                    observed_at=runtime_now,
+                )
+            )
             session.commit()
             project_id = project.id
         headers = login(client)
@@ -217,6 +268,7 @@ def test_briefing_orders_work_by_priority_and_owner_corrections_are_append_only(
         assert priority["band"] in {"NOW", "NEXT", "LATER", "MONITOR"}
         assert priority["estimated_effort_minutes"] == 600
         assert priority["confidence"] == "low"
+        assert priority["calendar_blocked_minutes"] == 480
         original_due = briefing["upcoming"][0]["due_at"]
 
         first = client.post(

@@ -16,6 +16,7 @@ from src.duesoon.persistence.models import (
     Assignment,
     AssignmentEffortEstimate,
     AssignmentProgressObservation,
+    CalendarBusyBlock,
 )
 
 from .priority import EffortProjection, WorkPriorityBreakdown, score_work_priority
@@ -57,6 +58,7 @@ class PlanningService:
             owner_effort = self._latest_effort(session)
             progress = self._latest_progress(session)
             percentiles = self._course_percentiles(records)
+            calendar_blocks = self._calendar_blocks(session, items, now)
             efforts = {
                 record.id: self._effort_projection(
                     record,
@@ -73,6 +75,9 @@ class PlanningService:
                 now,
                 course_value_percentile=percentiles.get(item.assignment_id),
                 usable_hours_per_day=learned_hours,
+                calendar_blocked_minutes=self._blocked_minutes(
+                    calendar_blocks, now, item.operational_due_at
+                ),
             )
             for item in items
         }
@@ -108,6 +113,7 @@ class PlanningService:
                 progress_rows[-1] if progress_rows else None,
             )
             percentiles = self._course_percentiles(records)
+            calendar_blocks = self._calendar_blocks(session, items, now)
         projected = next(item for item in items if item.assignment_id == assignment_id)
         priority = score_work_priority(
             projected,
@@ -115,6 +121,9 @@ class PlanningService:
             effort,
             now,
             course_value_percentile=percentiles.get(assignment_id),
+            calendar_blocked_minutes=self._blocked_minutes(
+                calendar_blocks, now, projected.operational_due_at
+            ),
         )
         return {
             "assignment_id": assignment_id,
@@ -427,6 +436,57 @@ class PlanningService:
             for index, item in enumerate(ordered):
                 values[item.id] = index / (len(ordered) - 1)
         return values
+
+    @staticmethod
+    def _calendar_blocks(
+        session: Session,
+        items: Sequence[EffectiveAssignment],
+        now: datetime,
+    ) -> tuple[CalendarBusyBlock, ...]:
+        due_values = [
+            _utc(item.operational_due_at)
+            for item in items
+            if item.operational_due_at is not None and _utc(item.operational_due_at) > _utc(now)
+        ]
+        if not due_values:
+            return ()
+        return tuple(
+            session.scalars(
+                select(CalendarBusyBlock).where(
+                    CalendarBusyBlock.active.is_(True),
+                    CalendarBusyBlock.ends_at > _utc(now),
+                    CalendarBusyBlock.starts_at < max(due_values),
+                )
+            ).all()
+        )
+
+    @staticmethod
+    def _blocked_minutes(
+        rows: Sequence[CalendarBusyBlock],
+        start: datetime,
+        end: datetime | None,
+    ) -> int:
+        if end is None or _utc(end) <= _utc(start):
+            return 0
+        left, right = _utc(start), _utc(end)
+        intervals = sorted(
+            (
+                max(left, _utc(row.starts_at)),
+                min(right, _utc(row.ends_at)),
+            )
+            for row in rows
+            if _utc(row.ends_at) > left and _utc(row.starts_at) < right
+        )
+        merged: list[tuple[datetime, datetime]] = []
+        for interval_start, interval_end in intervals:
+            if not merged or interval_start > merged[-1][1]:
+                merged.append((interval_start, interval_end))
+            else:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], interval_end))
+        return round(
+            sum((interval_end - interval_start).total_seconds() for interval_start, interval_end in merged)
+            / 60
+        )
 
 
 def _utc(value: datetime) -> datetime:

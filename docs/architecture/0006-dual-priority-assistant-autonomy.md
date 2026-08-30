@@ -71,6 +71,9 @@ selected over material alternatives.
   remaining-effort pace. Due-next ordering stays chronological; work-next ordering uses priority.
 - Calendar planning stores privacy-minimized busy intervals and hashed event identifiers, not event
   titles or descriptions. A day without known blocks is not automatically treated as fully free.
+- `work-priority-v2` subtracts merged, overlapping busy-calendar minutes from the wall-time window
+  before applying learned school-work capacity. Without learned capacity, blocks remain visible
+  context and exact usable minutes, slack, and start-by time remain unknown rather than invented.
 - Professor-to-course identity requires owner confirmation. DueSoon stores a normalized-email
   hash and masked display label, never the plaintext address in the identity projection. A verified
   sender may auto-scope future Gmail evidence only when it maps to exactly one course; ambiguous

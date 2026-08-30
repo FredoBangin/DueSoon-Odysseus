@@ -10,7 +10,7 @@ from typing import Any, Sequence
 from src.duesoon.assignments.effective import EffectiveAssignment
 
 
-POLICY_VERSION = "work-priority-v1"
+POLICY_VERSION = "work-priority-v2"
 COMPLETE = frozenset({"submitted", "graded", "cancelled"})
 
 
@@ -57,6 +57,7 @@ class WorkPriorityBreakdown:
     start_by_at: datetime | None
     slack_minutes: int | None
     usable_minutes_until_due: int | None
+    calendar_blocked_minutes: int
     estimated_effort_minutes: int | None
     remaining_effort_minutes: int | None
     progress_percent: int | None
@@ -85,6 +86,7 @@ class WorkPriorityBreakdown:
             "start_by_at": self.start_by_at.isoformat() if self.start_by_at else None,
             "slack_minutes": self.slack_minutes,
             "usable_minutes_until_due": self.usable_minutes_until_due,
+            "calendar_blocked_minutes": self.calendar_blocked_minutes,
             "estimated_effort_minutes": self.estimated_effort_minutes,
             "remaining_effort_minutes": self.remaining_effort_minutes,
             "progress_percent": self.progress_percent,
@@ -107,12 +109,13 @@ def score_work_priority(
     *,
     course_value_percentile: float | None = None,
     usable_hours_per_day: float | None = None,
+    calendar_blocked_minutes: int = 0,
 ) -> WorkPriorityBreakdown:
     """Calculate what should start now; never modifies urgency or reminders."""
 
     if item.submission_status.casefold() in COMPLETE:
         return WorkPriorityBreakdown(
-            0, 0, 0, 0, 0, 0, "MONITOR", None, None, None,
+            0, 0, 0, 0, 0, 0, "MONITOR", None, None, None, 0,
             effort.estimated_minutes, 0, effort.progress_percent,
             effort.confidence, "high", effort.source, effort.evidence_ids,
             effort.assumptions, ("Work is complete",),
@@ -126,6 +129,7 @@ def score_work_priority(
     pressure_score = due_score = value_score = overlap_score = instructor_score = 0
     start_by = None
     slack = usable = None
+    blocked = max(0, calendar_blocked_minutes)
 
     if remaining is None:
         reasons.append("Effort is unknown")
@@ -133,6 +137,11 @@ def score_work_priority(
         reasons.append("No operational deadline is precise enough for start-by planning")
     elif remaining is not None:
         wall_minutes = max(0, round((due - now).total_seconds() / 60))
+        blocked = min(blocked, wall_minutes)
+        if blocked:
+            reasons.append(
+                f"Known calendar commitments block {blocked} minute(s) before the deadline"
+            )
         buffer = max(30, round(remaining * 0.20))
         required = remaining + buffer
         if usable_hours_per_day is None:
@@ -144,7 +153,8 @@ def score_work_priority(
                 f"{remaining} estimated work minutes plus {buffer} buffer are spread across the remaining calendar time"
             )
         else:
-            usable = round(wall_minutes * usable_hours_per_day / 24)
+            unblocked_wall_minutes = max(0, wall_minutes - blocked)
+            usable = round(unblocked_wall_minutes * usable_hours_per_day / 24)
             slack = usable - required
             pressure_score = min(60, round(60 * sqrt(max(0.0, required / max(usable, 1)))))
             wall_required = round(required * 24 / usable_hours_per_day)
@@ -199,6 +209,7 @@ def score_work_priority(
         start_by_at=start_by,
         slack_minutes=slack,
         usable_minutes_until_due=usable,
+        calendar_blocked_minutes=blocked,
         estimated_effort_minutes=effort.estimated_minutes,
         remaining_effort_minutes=remaining,
         progress_percent=effort.progress_percent,
