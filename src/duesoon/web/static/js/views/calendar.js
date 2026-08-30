@@ -1,4 +1,4 @@
-import {get} from "../api.js";
+import {get,post} from "../api.js";
 import {node} from "./home.js";
 
 const VIEWS=["month","week","agenda"];
@@ -16,7 +16,37 @@ function range(view,anchor){
   return {start:anchor,end:addDays(anchor,30)};
 }
 
-function openDetail(event){
+async function planningEditor(body,event){
+  if(event.source!=="canvas"||!event.assignment_id)return;
+  const endpoint=`/api/v1/dashboard/assignments/${event.assignment_id}/planning`;
+  try{
+    const planning=await get(endpoint);
+    body.append(node("h5","Work planning","settings-section-heading"));
+    const summary=node("p",`${planning.priority.band} · ${planning.priority.score}/100 priority · ${planning.effort.confidence} confidence`,"admin-toggle-sub");
+    body.append(summary);
+    const form=node("form","","admin-card");
+    const effortLabel=node("label","Estimated minutes","settings-label");
+    const effort=document.createElement("input"); effort.className="settings-input"; effort.type="number"; effort.min="5"; effort.max="10080"; effort.value=planning.effort.estimated_minutes??"";
+    const progressLabel=node("label","Percent complete","settings-label");
+    const progress=document.createElement("input"); progress.className="settings-input"; progress.type="number"; progress.min="0"; progress.max="100"; progress.value=planning.progress_percent??0;
+    const save=node("button","Save work estimate","confirm-btn confirm-btn-primary"); save.type="submit";
+    const status=node("p","Corrections affect work priority only—not deadlines or reminders.","admin-toggle-sub");
+    form.append(effortLabel,effort,progressLabel,progress,save,status);
+    form.onsubmit=async submitEvent=>{
+      submitEvent.preventDefault(); save.disabled=true;
+      const payload={percent_complete:Number(progress.value)};
+      if(effort.value)payload.estimated_minutes=Number(effort.value);
+      try{
+        const updated=await post(endpoint,payload);
+        summary.textContent=`${updated.priority.band} · ${updated.priority.score}/100 priority · ${updated.effort.confidence} confidence`;
+        status.textContent="Saved. History remains reviewable.";
+      }catch(error){status.textContent=error.message;}finally{save.disabled=false;}
+    };
+    body.append(form);
+  }catch(error){body.append(node("p",`Work planning unavailable: ${error.message}`,"admin-toggle-sub"));}
+}
+
+async function openDetail(event){
   document.querySelector("#duesoon-calendar-detail")?.remove();
   const modal=node("div","","modal");
   modal.id="duesoon-calendar-detail";
@@ -38,6 +68,7 @@ function openDetail(event){
     link.href=event.external_url; link.target="_blank"; link.rel="noopener noreferrer"; body.append(link);
   }
   content.append(header,body); modal.append(content); document.body.append(modal);
+  await planningEditor(body,event);
 }
 
 function eventRow(event){

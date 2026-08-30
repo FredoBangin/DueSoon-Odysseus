@@ -146,7 +146,10 @@ class StructuredClaimExtractor:
                     "explicitness (explicit|implied|ambiguous). Allowed claim types: "
                     + ", ".join(sorted(CLAIM_TYPES))
                     + ". Deadline due_at must be ISO 8601 with explicit timezone; never invent "
-                    "a time or timezone. Return an empty claims array when no supported claim exists."
+                    "a time or timezone. For workload_hint, normalized_value must contain integer "
+                    "estimated_minutes, lower_minutes, and upper_minutes between 5 and 10080, "
+                    "ordered lower <= estimated <= upper. Return an empty claims array when no "
+                    "supported claim exists."
                 ),
             },
             {
@@ -469,6 +472,17 @@ def _validate_claim(value: AcademicClaim, source: CanvasSourceText) -> str:
             return "rejected"
         due_at = _candidate_due_at(value)
         if due_at is None or due_at.tzinfo is None:
+            return "rejected"
+    if value.claim_type == "workload_hint":
+        estimate = value.normalized_value.get("estimated_minutes")
+        lower = value.normalized_value.get("lower_minutes")
+        upper = value.normalized_value.get("upper_minutes")
+        if not all(
+            isinstance(item, int) and not isinstance(item, bool) and 5 <= item <= 10_080
+            for item in (estimate, lower, upper)
+        ):
+            return "rejected"
+        if not lower <= estimate <= upper:
             return "rejected"
     return "validated"
 

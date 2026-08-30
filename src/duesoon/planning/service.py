@@ -1,0 +1,308 @@
+"""Effort/progress evidence resolution and owner planning corrections."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from math import ceil
+from typing import Any, Sequence
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session, sessionmaker
+
+from src.duesoon.assignments.effective import EffectiveAssignment, project_canvas_assignment
+from src.duesoon.intelligence.service import assignment_load_options
+from src.duesoon.persistence.models import (
+    Assignment,
+    AssignmentEffortEstimate,
+    AssignmentProgressObservation,
+)
+
+from .priority import EffortProjection, WorkPriorityBreakdown, score_work_priority
+
+
+TYPE_PRIORS: tuple[tuple[tuple[str, ...], tuple[int, int, int]], ...] = (
+    (("capstone", "project", "research paper"), (600, 360, 960)),
+    (("exam", "midterm", "test", "final"), (240, 120, 420)),
+    (("lab", "report"), (240, 120, 420)),
+    (("homework", "challenge", "problem set"), (90, 45, 180)),
+    (("discussion",), (60, 30, 90)),
+    (("quiz",), (60, 30, 120)),
+    (("participation",), (30, 15, 45)),
+)
+
+
+class PlanningService:
+    def __init__(self, sessions: sessionmaker[Session]) -> None:
+        self.sessions = sessions
+
+    def priorities(
+        self,
+        items: Sequence[EffectiveAssignment],
+        now: datetime,
+    ) -> dict[int, WorkPriorityBreakdown]:
+        with self.sessions() as session:
+            records = session.scalars(
+                select(Assignment)
+                .options(*assignment_load_options())
+                .where(Assignment.id.in_([item.assignment_id for item in items]))
+                .order_by(Assignment.id)
+            ).all()
+            owner_effort = self._latest_effort(session)
+            progress = self._latest_progress(session)
+            percentiles = self._course_percentiles(records)
+            efforts = {
+                record.id: self._effort_projection(
+                    record,
+                    owner_effort.get(record.id),
+                    progress.get(record.id),
+                )
+                for record in records
+            }
+        return {
+            item.assignment_id: score_work_priority(
+                item,
+                items,
+                efforts.get(item.assignment_id, EffortProjection.unknown()),
+                now,
+                course_value_percentile=percentiles.get(item.assignment_id),
+            )
+            for item in items
+        }
+
+    def inspect(self, assignment_id: int) -> dict[str, Any]:
+        now = datetime.now(UTC)
+        with self.sessions() as session:
+            records = session.scalars(
+                select(Assignment)
+                .options(*assignment_load_options())
+                .order_by(Assignment.id)
+            ).all()
+            selected = next((item for item in records if item.id == assignment_id), None)
+            if selected is None:
+                raise LookupError("assignment not found")
+            items = tuple(project_canvas_assignment(item) for item in records)
+            effort_rows = session.scalars(
+                select(AssignmentEffortEstimate)
+                .where(AssignmentEffortEstimate.assignment_id == assignment_id)
+                .order_by(AssignmentEffortEstimate.created_at, AssignmentEffortEstimate.id)
+            ).all()
+            progress_rows = session.scalars(
+                select(AssignmentProgressObservation)
+                .where(AssignmentProgressObservation.assignment_id == assignment_id)
+                .order_by(
+                    AssignmentProgressObservation.created_at,
+                    AssignmentProgressObservation.id,
+                )
+            ).all()
+            effort = self._effort_projection(
+                selected,
+                effort_rows[-1] if effort_rows else None,
+                progress_rows[-1] if progress_rows else None,
+            )
+            percentiles = self._course_percentiles(records)
+        projected = next(item for item in items if item.assignment_id == assignment_id)
+        priority = score_work_priority(
+            projected,
+            items,
+            effort,
+            now,
+            course_value_percentile=percentiles.get(assignment_id),
+        )
+        return {
+            "assignment_id": assignment_id,
+            "effort": {
+                "estimated_minutes": effort.estimated_minutes,
+                "lower_minutes": effort.lower_minutes,
+                "upper_minutes": effort.upper_minutes,
+                "remaining_minutes": effort.remaining_minutes,
+                "confidence": effort.confidence,
+                "source": effort.source,
+                "evidence_ids": list(effort.evidence_ids),
+            },
+            "progress_percent": effort.progress_percent,
+            "priority": priority.to_dict(),
+            "effort_history_count": len(effort_rows),
+            "progress_history_count": len(progress_rows),
+            "protections": {
+                "changes_deadline": False,
+                "changes_urgency": False,
+                "changes_reminders": False,
+            },
+        }
+
+    def record_owner_update(
+        self,
+        assignment_id: int,
+        *,
+        estimated_minutes: int | None = None,
+        percent_complete: int | None = None,
+        note: str | None = None,
+    ) -> dict[str, Any]:
+        if estimated_minutes is None and percent_complete is None:
+            raise ValueError("effort or progress value is required")
+        if estimated_minutes is not None and not 5 <= estimated_minutes <= 10_080:
+            raise ValueError("estimated minutes must be between 5 and 10080")
+        if percent_complete is not None and not 0 <= percent_complete <= 100:
+            raise ValueError("progress percent must be between 0 and 100")
+        clean_note = note.strip()[:2000] if note and note.strip() else None
+        with self.sessions() as session:
+            if session.get(Assignment, assignment_id) is None:
+                raise LookupError("assignment not found")
+            if estimated_minutes is not None:
+                session.add(
+                    AssignmentEffortEstimate(
+                        assignment_id=assignment_id,
+                        estimated_minutes=estimated_minutes,
+                        lower_minutes=estimated_minutes,
+                        upper_minutes=estimated_minutes,
+                        confidence="high",
+                        source_kind="owner_confirmed",
+                        evidence_id=None,
+                        owner_confirmed=True,
+                        note=clean_note,
+                    )
+                )
+            if percent_complete is not None:
+                session.add(
+                    AssignmentProgressObservation(
+                        assignment_id=assignment_id,
+                        percent_complete=percent_complete,
+                        source_kind="owner",
+                        note=clean_note,
+                    )
+                )
+            session.commit()
+        return self.inspect(assignment_id)
+
+    @staticmethod
+    def _latest_effort(session: Session) -> dict[int, AssignmentEffortEstimate]:
+        rows = session.scalars(
+            select(AssignmentEffortEstimate).order_by(
+                AssignmentEffortEstimate.assignment_id,
+                AssignmentEffortEstimate.created_at,
+                AssignmentEffortEstimate.id,
+            )
+        ).all()
+        return {item.assignment_id: item for item in rows}
+
+    @staticmethod
+    def _latest_progress(session: Session) -> dict[int, AssignmentProgressObservation]:
+        rows = session.scalars(
+            select(AssignmentProgressObservation).order_by(
+                AssignmentProgressObservation.assignment_id,
+                AssignmentProgressObservation.created_at,
+                AssignmentProgressObservation.id,
+            )
+        ).all()
+        return {item.assignment_id: item for item in rows}
+
+    @staticmethod
+    def _effort_projection(
+        assignment: Assignment,
+        owner: AssignmentEffortEstimate | None,
+        progress: AssignmentProgressObservation | None,
+    ) -> EffortProjection:
+        progress_percent = progress.percent_complete if progress else 0
+        if owner is not None:
+            remaining = ceil(owner.estimated_minutes * (100 - progress_percent) / 100)
+            return EffortProjection(
+                owner.estimated_minutes,
+                owner.lower_minutes,
+                owner.upper_minutes,
+                remaining,
+                progress_percent,
+                owner.confidence,
+                owner.source_kind,
+                (f"owner-effort:{owner.id}",),
+                (() if progress else ("No progress update exists; all estimated effort remains.",)),
+            )
+
+        evidence = PlanningService._workload_evidence(assignment)
+        if evidence is not None:
+            estimate, lower, upper, evidence_id, confidence = evidence
+            remaining = ceil(estimate * (100 - progress_percent) / 100)
+            return EffortProjection(
+                estimate,
+                lower,
+                upper,
+                remaining,
+                progress_percent,
+                confidence,
+                "validated_workload_evidence",
+                (evidence_id,),
+                (() if progress else ("No progress update exists; all estimated effort remains.",)),
+            )
+
+        text = f"{assignment.assignment_type or ''} {assignment.canonical_title}".casefold()
+        prior = next((value for words, value in TYPE_PRIORS if any(word in text for word in words)), None)
+        if prior is None:
+            return EffortProjection.unknown()
+        estimate, lower, upper = prior
+        remaining = ceil(estimate * (100 - progress_percent) / 100)
+        return EffortProjection(
+            estimate,
+            lower,
+            upper,
+            remaining,
+            progress_percent,
+            "low",
+            "assignment_type_prior",
+            (),
+            (
+                "Low-confidence assignment-type prior; owner correction or validated workload evidence should replace it.",
+                *(() if progress else ("No progress update exists; all estimated effort remains.",)),
+            ),
+        )
+
+    @staticmethod
+    def _workload_evidence(
+        assignment: Assignment,
+    ) -> tuple[int, int, int, str, str] | None:
+        candidates = []
+        for link in assignment.evidence:
+            claim = link.claim
+            if (
+                link.disposition != "admitted"
+                or claim.validation_status != "validated"
+                or claim.claim_type != "workload_hint"
+            ):
+                continue
+            value = claim.normalized_value
+            if not isinstance(value, dict):
+                continue
+            estimate = value.get("estimated_minutes")
+            lower = value.get("lower_minutes", estimate)
+            upper = value.get("upper_minutes", estimate)
+            if not all(isinstance(item, int) and 5 <= item <= 10_080 for item in (estimate, lower, upper)):
+                continue
+            if not lower <= estimate <= upper:
+                continue
+            candidates.append((
+                link.authority_score,
+                claim.extraction_confidence,
+                estimate,
+                lower,
+                upper,
+                f"assignment-evidence:{link.id}:claim:{claim.id}",
+            ))
+        if not candidates:
+            return None
+        authority, extraction, estimate, lower, upper, evidence_id = max(candidates)
+        confidence = "high" if authority >= 0.9 and extraction >= 0.85 else "medium"
+        return estimate, lower, upper, evidence_id, confidence
+
+    @staticmethod
+    def _course_percentiles(records: Sequence[Assignment]) -> dict[int, float]:
+        grouped: dict[int, list[Assignment]] = {}
+        for item in records:
+            if item.points_possible is not None and item.points_possible >= 0:
+                grouped.setdefault(item.course_id, []).append(item)
+        values: dict[int, float] = {}
+        for course_items in grouped.values():
+            ordered = sorted(course_items, key=lambda item: (item.points_possible, item.id))
+            if len(ordered) == 1:
+                values[ordered[0].id] = 0.5
+                continue
+            for index, item in enumerate(ordered):
+                values[item.id] = index / (len(ordered) - 1)
+        return values

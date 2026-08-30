@@ -51,6 +51,7 @@ from src.duesoon.persistence.database import (
     session_factory,
 )
 from src.duesoon.persistence.models import Assignment, Course
+from src.duesoon.planning import PlanningService
 from src.duesoon.assignments.effective import EffectiveAssignment, project_canvas_assignment
 from src.duesoon.intelligence.service import (
     EvidenceInspectionService,
@@ -120,7 +121,12 @@ def create_app(
         runtime_notification_publisher,
     )
     runtime_auth = AuthService(runtime_settings, runtime_sessions)
-    runtime_briefing = BriefingService(runtime_settings, runtime_sessions)
+    runtime_planning = PlanningService(runtime_sessions)
+    runtime_briefing = BriefingService(
+        runtime_settings,
+        runtime_sessions,
+        runtime_planning,
+    )
     runtime_diagnostics = DiagnosticsService(runtime_settings, runtime_sessions)
     runtime_evidence = EvidenceInspectionService(runtime_sessions)
     runtime_evidence_review = EvidenceReviewService(runtime_sessions)
@@ -204,6 +210,7 @@ def create_app(
     application.state.reminder_scheduler = runtime_scheduler
     application.state.auth = runtime_auth
     application.state.briefing = runtime_briefing
+    application.state.planning = runtime_planning
     application.state.diagnostics = runtime_diagnostics
     application.state.evidence = runtime_evidence
     application.state.evidence_review = runtime_evidence_review

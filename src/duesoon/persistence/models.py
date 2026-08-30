@@ -228,6 +228,42 @@ class AssignmentEvidence(Base):
     claim: Mapped[Claim] = relationship(back_populates="assignment_links")
 
 
+class AssignmentEffortEstimate(Base):
+    """Append-only effort estimate; never alters an academic deadline."""
+
+    __tablename__ = "assignment_effort_estimates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    assignment_id: Mapped[int] = mapped_column(
+        ForeignKey("assignments.id", ondelete="RESTRICT"), index=True
+    )
+    estimated_minutes: Mapped[int] = mapped_column(Integer)
+    lower_minutes: Mapped[int] = mapped_column(Integer)
+    upper_minutes: Mapped[int] = mapped_column(Integer)
+    confidence: Mapped[str] = mapped_column(String(30))
+    source_kind: Mapped[str] = mapped_column(String(50))
+    evidence_id: Mapped[str | None] = mapped_column(String(255))
+    owner_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+    note: Mapped[str | None] = mapped_column(Text)
+    policy_version: Mapped[str] = mapped_column(String(50), default="planning-evidence-v1")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class AssignmentProgressObservation(Base):
+    """Append-only owner progress observation used only for work planning."""
+
+    __tablename__ = "assignment_progress_observations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    assignment_id: Mapped[int] = mapped_column(
+        ForeignKey("assignments.id", ondelete="RESTRICT"), index=True
+    )
+    percent_complete: Mapped[int] = mapped_column(Integer)
+    source_kind: Mapped[str] = mapped_column(String(50), default="owner")
+    note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
 class SyncRun(Base):
     __tablename__ = "sync_runs"
 

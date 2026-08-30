@@ -1926,10 +1926,18 @@ absolute deterministic measure that controls reminder escalation. A separate ver
 `work_priority_score` answers what should be started or continued now. Work priority is driven
 primarily by slack: usable available time minus remaining estimated effort minus a schedule buffer.
 Usable time excludes known sleep, classes, work, appointments, and other blocked calendar periods.
-When schedule access is missing, DueSoon uses explicit fallback assumptions, lowers confidence, and
-asks the owner for the relevant connection rather than pretending all clock time is available. A
-large distant project may therefore rank ahead of a small nearer task without falsely inflating
+When schedule access is missing, DueSoon keeps usable capacity, start-by time, and exact slack
+unknown, lowers confidence, and asks the owner for the relevant connection rather than pretending
+all clock time is available. It may use a deterministic workload-density heuristic for relative
+ordering, but it must not invent a fixed number of usable hours per day. The initial calendar use
+case is read-only work-shift blocking combined with Canvas deadlines and professor-email evidence.
+A large distant project may therefore rank ahead of a small nearer task without falsely inflating
 deadline urgency.
+
+Canvas submission timestamps alone do not prove time worked. Capacity learning may use submission
+outcomes to trigger occasional owner questions about time spent, then combine confirmed effort,
+progress observations, and calendar availability. Learned capacity remains confidence-scored,
+reviewable, and reversible and does not change deadlines or checkpoint reminder policy.
 
 Effort estimates may use assignment type, course-relative value, instructions, modules, files,
 professor communications, historical outcomes, and owner corrections. AI may propose structured

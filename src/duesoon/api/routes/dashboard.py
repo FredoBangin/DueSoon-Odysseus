@@ -75,6 +75,12 @@ class MemoryUpdateRequest(BaseModel):
     active: bool | None = None
 
 
+class PlanningUpdateRequest(BaseModel):
+    estimated_minutes: int | None = Field(default=None, ge=5, le=10_080)
+    percent_complete: int | None = Field(default=None, ge=0, le=100)
+    note: str | None = Field(default=None, max_length=2000)
+
+
 @router.get("/briefing")
 def briefing(request: Request):
     return request.app.state.briefing.snapshot()
@@ -206,6 +212,34 @@ def assignment_evidence(assignment_id: int, request: Request) -> EvidenceInspect
         return inspection_response(request.app.state.evidence.inspect(assignment_id))
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/assignments/{assignment_id}/planning")
+def assignment_planning(assignment_id: int, request: Request):
+    try:
+        return request.app.state.planning.inspect(assignment_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post(
+    "/assignments/{assignment_id}/planning",
+    dependencies=[Depends(require_csrf)],
+)
+def update_assignment_planning(
+    assignment_id: int,
+    payload: PlanningUpdateRequest,
+    request: Request,
+):
+    try:
+        return request.app.state.planning.record_owner_update(
+            assignment_id,
+            **payload.model_dump(),
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post(

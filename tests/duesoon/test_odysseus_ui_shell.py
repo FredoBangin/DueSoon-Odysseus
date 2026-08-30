@@ -72,7 +72,8 @@ def test_home_keeps_approved_two_column_briefing_and_embedded_assistant() -> Non
     ):
         assert inherited_class in source
     assert 'assignmentList("Urgent", data.urgent)' in source
-    assert 'assignmentList("Upcoming", data.upcoming)' in source
+    assert 'assignmentList("Work priority", data.upcoming, "priority")' in source
+    assert "item.work_priority.band" in source
     assert 'assignmentList("Missing or overdue"' in source
     assert 'assignmentList("Recently completed"' in source
     assert 'node("button", "Ask")' not in source
@@ -140,6 +141,10 @@ def test_calendar_retains_controls_and_read_only_detail_behavior() -> None:
     assert "duesoon-calendar-complete" in source
     assert "text-decoration: line-through" in css
     assert all(word not in source for word in ("createEvent", "updateEvent", "deleteEvent"))
+    assert "/api/v1/dashboard/assignments/${event.assignment_id}/planning" in source
+    assert "Estimated minutes" in source
+    assert "Percent complete" in source
+    assert "confirm-btn confirm-btn-primary" in source
 
 
 def test_gmail_can_be_saved_as_read_only_document_evidence() -> None:

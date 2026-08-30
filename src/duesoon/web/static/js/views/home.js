@@ -18,7 +18,7 @@ function dueLabel(item) {
   }).format(due);
 }
 
-function assignmentList(title, items) {
+function assignmentList(title, items, mode = "urgency") {
   const card = node("article", "", "admin-card");
   card.append(node("h2", title));
 
@@ -43,9 +43,11 @@ function assignmentList(title, items) {
       ),
     );
 
-    const urgency = node("span", item.urgency.level, "cal-event-tag");
-    urgency.title = (item.urgency.reasons || []).join(" · ");
-    row.append(dot, information, urgency);
+    const label = mode === "priority" ? item.work_priority.band : item.urgency.level;
+    const reasons = mode === "priority" ? item.work_priority.reasons : item.urgency.reasons;
+    const badge = node("span", label, "cal-event-tag");
+    badge.title = (reasons || []).join(" · ");
+    row.append(dot, information, badge);
     list.append(row);
   }
 
@@ -95,7 +97,7 @@ export function renderHome(root, data, onAsk) {
   grid.append(
     assistantCard(onAsk),
     assignmentList("Urgent", data.urgent),
-    assignmentList("Upcoming", data.upcoming),
+    assignmentList("Work priority", data.upcoming, "priority"),
     assignmentList("Missing or overdue", [...data.missing, ...data.overdue]),
     assignmentList("Recently completed", data.completed_recently),
   );

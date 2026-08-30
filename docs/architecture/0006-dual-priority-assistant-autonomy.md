@@ -60,7 +60,13 @@ selected over material alternatives.
 - LOW urgency no longer means "ignore this work"; work priority can surface a large project early.
 - Reminder behavior stays compatible with existing checkpoint, recheck, and deduplication rules.
 - Work-priority records need versioned factors, effort provenance, confidence, and outcome feedback.
-- Missing calendar/schedule context uses explicit fallback assumptions and lowers priority confidence.
+- Missing calendar/schedule context keeps usable capacity, start-by time, and exact slack unknown.
+  A deterministic workload-density heuristic may still provide a low-confidence relative ordering,
+  but DueSoon must not invent a fixed number of usable hours per day. Connected read-only calendar
+  blocks, especially work shifts, can later supply usable windows.
+- Capacity learning requires more than Canvas submission timestamps. Submission outcomes may trigger
+  owner questions about time spent; progress history, confirmed effort, and calendar availability
+  can then produce a reviewable, reversible capacity estimate after enough observations exist.
 - General answers can use the model without granting unrestricted tool, filesystem, secret, or
   network access.
 - Automatic learning requires an append-only audit event and a reversible current-state projection.

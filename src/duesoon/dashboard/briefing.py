@@ -20,6 +20,8 @@ from src.duesoon.persistence.models import (
     ReminderEvent,
     SyncRun,
 )
+from src.duesoon.planning import PlanningService
+from src.duesoon.planning.priority import WorkPriorityBreakdown
 from src.duesoon.urgency.scoring import score_assignment
 
 COLORS = ("#0b84f3", "#8b5cf6", "#e4553d", "#1b9e77", "#d97706", "#db2777")
@@ -34,8 +36,14 @@ def _color(course_id: str) -> str:
 
 
 class BriefingService:
-    def __init__(self, settings: DueSoonSettings, sessions: sessionmaker[Session]) -> None:
+    def __init__(
+        self,
+        settings: DueSoonSettings,
+        sessions: sessionmaker[Session],
+        planning: PlanningService,
+    ) -> None:
         self.settings, self.sessions = settings, sessions
+        self.planning = planning
 
     def _items(self) -> tuple[EffectiveAssignment, ...]:
         with self.sessions() as session:
@@ -49,7 +57,13 @@ class BriefingService:
             ).where(Assignment.published.is_(True))).all()
             return tuple(project_canvas_assignment(record) for record in records)
 
-    def _view(self, item: EffectiveAssignment, items: tuple[EffectiveAssignment, ...], now: datetime) -> dict[str, object]:
+    def _view(
+        self,
+        item: EffectiveAssignment,
+        items: tuple[EffectiveAssignment, ...],
+        now: datetime,
+        priority: WorkPriorityBreakdown,
+    ) -> dict[str, object]:
         urgency = score_assignment(item, items, now)
         return {
             "id": item.assignment_id, "title": item.title, "course_name": item.course_name,
@@ -65,7 +79,9 @@ class BriefingService:
             "conflicting_due_at": [
                 _utc(value).isoformat() for value in item.conflicting_due_at
             ],
-            "urgency": urgency.to_dict(), "course_color": _color(item.canvas_course_id),
+            "urgency": urgency.to_dict(),
+            "work_priority": priority.to_dict(),
+            "course_color": _color(item.canvas_course_id),
         }
 
     def _deadline_change_view(self, item: EffectiveAssignment) -> dict[str, object] | None:
@@ -107,10 +123,20 @@ class BriefingService:
     def snapshot(self, now: datetime | None = None) -> dict[str, object]:
         now = _utc(now or datetime.now(UTC))
         items = self._items()
-        views = [self._view(item, items, now) for item in items]
+        priorities = self.planning.priorities(items, now)
+        views = [
+            self._view(item, items, now, priorities[item.assignment_id])
+            for item in items
+        ]
         incomplete = [v for v in views if v["submission_status"] not in {"submitted", "graded"}]
         due_items = [v for v in incomplete if v["due_at"]]
-        due_items.sort(key=lambda value: str(value["due_at"]))
+        due_items.sort(
+            key=lambda value: (
+                -int(value["work_priority"]["score"]),
+                str(value["due_at"]),
+                int(value["id"]),
+            )
+        )
         urgent = [v for v in due_items if v["urgency"]["level"] in {"HIGH", "CRITICAL"}]
         overdue = [v for v in due_items if datetime.fromisoformat(str(v["due_at"])) < now]
         missing = [v for v in incomplete if v["submission_status"] == "missing"]

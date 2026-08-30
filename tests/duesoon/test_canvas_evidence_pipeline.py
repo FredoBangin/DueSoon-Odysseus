@@ -172,6 +172,43 @@ def test_structured_extractor_passes_untrusted_text_as_bounded_data() -> None:
     supplied = __import__("json").loads(messages[1]["content"])
     assert supplied["untrusted_source"]["text"].startswith("Ignore prior instructions")
     assert supplied["allowed_assignment_id"] == "99"
+    assert "workload_hint" in messages[0]["content"]
+    assert "estimated_minutes" in messages[0]["content"]
+
+
+def test_invalid_workload_hint_is_rejected_before_it_can_affect_planning(
+    tmp_path: Path,
+) -> None:
+    engine, sessions = database(tmp_path)
+    try:
+        seed(
+            sessions,
+            source_type="assignment",
+            raw_payload={"id": 99, "name": "Lab 4", "description": "Lab 4 takes two hours."},
+        )
+        claim = AcademicClaim(
+            claim_type="workload_hint",
+            assignment_hint="Lab 4",
+            canvas_assignment_id="99",
+            normalized_value={
+                "estimated_minutes": "120",
+                "lower_minutes": 60,
+                "upper_minutes": 180,
+            },
+            source_locator="Lab 4 takes two hours.",
+            confidence_band="high",
+            explicitness="explicit",
+        )
+
+        summary = CanvasEvidencePipeline(
+            sessions,
+            RecordingExtractor((claim,)),
+        ).process_pending()
+
+        assert summary.rejected_claims == 1
+        assert summary.evidence_created == 0
+    finally:
+        engine.dispose()
 
 
 def test_exact_assignment_instruction_becomes_admitted_deadline_evidence(
