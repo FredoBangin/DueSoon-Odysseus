@@ -76,6 +76,10 @@ selected over material alternatives.
   sender may auto-scope future Gmail evidence only when it maps to exactly one course; ambiguous
   cross-course senders remain unresolved. Syllabus extraction may propose an identity but cannot
   confirm it.
+- Connected Gmail and Google Calendar readers run as isolated auxiliary work inside the single
+  scheduler. Their persisted interval watermark prevents unnecessary provider calls, their failure
+  cannot block Canvas reminder evaluation, and calendar refresh reconciles removed events within
+  the fetched window. Gmail remains read-only evidence; Calendar remains read-only availability.
 - General answers can use the model without granting unrestricted tool, filesystem, secret, or
   network access.
 - Automatic learning requires an append-only audit event and a reversible current-state projection.

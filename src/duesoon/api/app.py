@@ -44,6 +44,7 @@ from src.duesoon.diagnostics import DiagnosticsService
 from src.duesoon.google import (
     GoogleCalendarEvidenceService,
     GoogleEvidenceService,
+    GoogleWorkspaceSyncService,
     GoogleWorkspaceClient,
     GoogleWorkspaceConfig,
 )
@@ -143,11 +144,28 @@ def create_app(
     runtime_calendar_evidence = GoogleCalendarEvidenceService(runtime_sessions)
     owned_google_client: GoogleWorkspaceClient | None = None
     runtime_google = google_client
+    google_config: GoogleWorkspaceConfig | None = None
     if runtime_google is None:
         google_config = GoogleWorkspaceConfig()
         if google_config.enabled:
             owned_google_client = GoogleWorkspaceClient(google_config)
             runtime_google = owned_google_client
+    runtime_google_sync = None
+    if runtime_google is not None:
+        runtime_google_sync = GoogleWorkspaceSyncService(
+            runtime_sessions,
+            runtime_google,
+            runtime_google_evidence,
+            runtime_calendar_evidence,
+            runtime_evidence_pipeline,
+            should_extract=lambda: (
+                runtime_model_settings.effective().enabled
+                and runtime_model_settings.effective().configured
+            ),
+            interval_seconds=int(
+                getattr(runtime_google.config, "sync_interval_seconds", 900)
+            ),
+        )
     runtime_assistant = AssistantService(
         runtime_sessions,
         runtime_model_settings,
@@ -184,6 +202,7 @@ def create_app(
         runtime_scheduler = ReminderScheduler(
             reminder_service,
             interval_seconds=runtime_settings.scheduler_interval_seconds,
+            auxiliary_runners=(runtime_google_sync,) if runtime_google_sync else (),
         )
 
     @asynccontextmanager
@@ -232,6 +251,7 @@ def create_app(
     application.state.google = runtime_google
     application.state.google_evidence = runtime_google_evidence
     application.state.calendar_evidence = runtime_calendar_evidence
+    application.state.google_sync = runtime_google_sync
     application.state.evidence_pipeline = runtime_evidence_pipeline
     application.mount("/assets", StaticFiles(directory=WEB_STATIC), name="assets")
     application.mount(

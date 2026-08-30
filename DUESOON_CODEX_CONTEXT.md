@@ -1969,6 +1969,12 @@ when the sender maps to exactly one active course. If one sender maps to multipl
 remains unresolved. Course documents and syllabi may propose a professor identity, but the proposal
 must be confirmed in Review before it affects Gmail matching or source authority.
 
+When Google Workspace is connected, the single scheduler automatically refreshes read-only Gmail
+evidence and Google Calendar availability on a persisted interval. This auxiliary refresh is
+failure-isolated so Google or model failure cannot prevent Canvas synchronization, reminder
+evaluation, or immediate submission rechecks. Calendar refresh reconciles events removed from the
+fetched window; Gmail versions remain idempotent and queued extraction remains bounded.
+
 Effort estimates may use assignment type, course-relative value, instructions, modules, files,
 professor communications, historical outcomes, and owner corrections. AI may propose structured
 effort, progress, alias, and workload interpretations with confidence and provenance. Deterministic

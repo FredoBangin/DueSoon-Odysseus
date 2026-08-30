@@ -21,6 +21,7 @@ class GoogleWorkspaceConfig(BaseSettings):
     client_secret: SecretStr | None = None
     refresh_token: SecretStr | None = None
     timeout_seconds: float = Field(default=15.0, ge=1, le=60)
+    sync_interval_seconds: int = Field(default=900, ge=300, le=86400)
 
     @model_validator(mode="after")
     def validate_credentials(self) -> "GoogleWorkspaceConfig":

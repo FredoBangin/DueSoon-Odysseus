@@ -17,8 +17,15 @@ class ReminderRunner(Protocol):
 class ReminderScheduler:
     """Run reminder evaluation immediately, then at a fixed interval."""
 
-    def __init__(self, service: ReminderRunner, *, interval_seconds: int) -> None:
+    def __init__(
+        self,
+        service: ReminderRunner,
+        *,
+        interval_seconds: int,
+        auxiliary_runners: tuple[ReminderRunner, ...] = (),
+    ) -> None:
         self._service = service
+        self._auxiliary_runners = auxiliary_runners
         self._interval_seconds = interval_seconds
         self._stop_event = asyncio.Event()
         self._task: asyncio.Task[None] | None = None
@@ -39,6 +46,11 @@ class ReminderScheduler:
 
     async def _run(self) -> None:
         while not self._stop_event.is_set():
+            for runner in self._auxiliary_runners:
+                try:
+                    await asyncio.to_thread(runner.run_once)
+                except Exception:
+                    logger.exception("auxiliary scheduler cycle failed")
             try:
                 await asyncio.to_thread(self._service.run_once)
             except Exception:

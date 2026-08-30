@@ -32,6 +32,29 @@ async def test_scheduler_runs_immediately_and_stops_cleanly() -> None:
     assert service.calls == 1
 
 
+async def test_auxiliary_failure_does_not_block_reminder_cycle() -> None:
+    service = RecordingReminderService()
+
+    class FailingAuxiliary:
+        def run_once(self) -> None:
+            raise RuntimeError("integration unavailable")
+
+    scheduler = ReminderScheduler(
+        service,
+        interval_seconds=3600,
+        auxiliary_runners=(FailingAuxiliary(),),
+    )
+
+    scheduler.start()
+    for _ in range(50):
+        if service.calls:
+            break
+        await asyncio.sleep(0.01)
+    await scheduler.stop()
+
+    assert service.calls == 1
+
+
 def test_application_lifespan_starts_and_stops_injected_scheduler(tmp_path: Path) -> None:
     class RecordingScheduler:
         def __init__(self) -> None:
