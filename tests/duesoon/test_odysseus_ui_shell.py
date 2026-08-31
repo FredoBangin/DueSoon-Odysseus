@@ -84,6 +84,13 @@ def test_home_keeps_approved_two_column_briefing_and_embedded_assistant() -> Non
     assert "About how many minutes" not in source
 
 
+def test_learning_feedback_grid_can_shrink_without_workspace_overflow() -> None:
+    css = read("css/app.css")
+
+    assert "grid-template-columns: minmax(150px, 0.8fr) minmax(0, 1.2fr) auto" in css
+    assert ".duesoon-learning-input {\n  min-height: 32px;" in css
+
+
 def test_sidebar_uses_exact_odysseus_section_elements_and_animations() -> None:
     html = read("index.html")
     shell = read("js/odysseus-shell.js")

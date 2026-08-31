@@ -69,7 +69,7 @@
 
 .duesoon-learning-row {
   display: grid;
-  grid-template-columns: minmax(220px, 0.8fr) minmax(280px, 1.2fr) auto;
+  grid-template-columns: minmax(150px, 0.8fr) minmax(0, 1.2fr) auto;
   gap: 10px;
   align-items: center;
   padding: 10px 0;
