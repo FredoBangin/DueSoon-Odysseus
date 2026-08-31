@@ -47,6 +47,7 @@ CLAIM_TYPES = frozenset(
         "assignment_optional",
         "points_possible",
         "workload_hint",
+        "prerequisite_relationship",
         "submission_instruction",
         "assignment_alias",
         "course_meeting_time",
@@ -152,7 +153,10 @@ class StructuredClaimExtractor:
                     "a time or timezone. For workload_hint, normalized_value must contain integer "
                     "estimated_minutes, lower_minutes, and upper_minutes between 5 and 10080, "
                     "ordered lower <= estimated <= upper. Return an empty claims array when no "
-                    "supported claim exists. For professor_identity, normalized_value must contain "
+                    "supported claim exists. For prerequisite_relationship, assignment_hint names "
+                    "the blocked assignment and normalized_value must contain the explicit "
+                    "prerequisite_assignment_hint. Never infer a prerequisite from ordering alone. "
+                    "For professor_identity, normalized_value must contain "
                     "the exact professor email found in the course source; this claim always "
                     "requires owner confirmation before sender authority changes."
                 ),
@@ -503,6 +507,15 @@ def _validate_claim(value: AcademicClaim, source: CanvasSourceText) -> str:
         ):
             return "rejected"
         if not lower <= estimate <= upper:
+            return "rejected"
+    if value.claim_type == "prerequisite_relationship":
+        prerequisite = value.normalized_value.get("prerequisite_assignment_hint")
+        if (
+            not isinstance(prerequisite, str)
+            or not prerequisite.strip()
+            or len(prerequisite.strip()) > 1000
+            or not value.assignment_hint
+        ):
             return "rejected"
     if value.claim_type == "professor_identity":
         email = value.normalized_value.get("email")

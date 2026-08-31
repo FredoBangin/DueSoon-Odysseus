@@ -13,6 +13,12 @@ from sqlalchemy.orm import Session, selectinload, sessionmaker
 
 from src.duesoon.assignments.effective import EffectiveAssignment, project_canvas_assignment
 from src.duesoon.intelligence.service import assignment_load_options
+from src.duesoon.intelligence.matcher import (
+    HIGH_MATCH,
+    AssignmentHint,
+    AssignmentReference,
+    match_assignment,
+)
 from src.duesoon.persistence.models import (
     Assignment,
     AssignmentCompletionObservation,
@@ -21,7 +27,12 @@ from src.duesoon.persistence.models import (
     CalendarBusyBlock,
 )
 
-from .priority import EffortProjection, WorkPriorityBreakdown, score_work_priority
+from .priority import (
+    BlockingProjection,
+    EffortProjection,
+    WorkPriorityBreakdown,
+    score_work_priority,
+)
 
 
 TYPE_PRIORS: tuple[tuple[tuple[str, ...], tuple[int, int, int]], ...] = (
@@ -126,6 +137,21 @@ class PlanningService:
                 )
                 for record in records
             }
+        base = {
+            item.assignment_id: score_work_priority(
+                item,
+                items,
+                efforts.get(item.assignment_id, EffortProjection.unknown()),
+                now,
+                course_value_percentile=percentiles.get(item.assignment_id),
+                usable_hours_per_day=learned_hours,
+                calendar_blocked_minutes=self._blocked_minutes(
+                    calendar_blocks, now, item.operational_due_at
+                ),
+            )
+            for item in items
+        }
+        blocking = self._blocking_context(records, items, base)
         return {
             item.assignment_id: score_work_priority(
                 item,
@@ -137,6 +163,7 @@ class PlanningService:
                 calendar_blocked_minutes=self._blocked_minutes(
                     calendar_blocks, now, item.operational_due_at
                 ),
+                blocking=blocking.get(item.assignment_id),
             )
             for item in items
         }
@@ -534,6 +561,74 @@ class PlanningService:
             for index, item in enumerate(ordered):
                 values[item.id] = index / (len(ordered) - 1)
         return values
+
+    @staticmethod
+    def _blocking_context(
+        records: Sequence[Assignment],
+        items: Sequence[EffectiveAssignment],
+        base: dict[int, WorkPriorityBreakdown],
+    ) -> dict[int, BlockingProjection]:
+        """Resolve admitted prerequisite claims within one course; ambiguity has no effect."""
+
+        item_by_id = {item.assignment_id: item for item in items}
+        references = tuple(
+            AssignmentReference(
+                assignment_id=record.id,
+                course_id=record.course_id,
+                canonical_title=record.canonical_title,
+                canvas_assignment_id=record.canvas_assignment_id,
+                canonical_url=record.html_url,
+                assignment_type=record.assignment_type,
+                due_at=record.canvas_due_at,
+            )
+            for record in records
+        )
+        relations: dict[int, dict[int, str]] = {}
+        for dependent in records:
+            projected = item_by_id.get(dependent.id)
+            if projected is None or projected.submission_status.casefold() in {"submitted", "graded", "cancelled"}:
+                continue
+            for link in dependent.evidence:
+                claim = link.claim
+                if (
+                    link.disposition != "admitted"
+                    or claim.validation_status != "validated"
+                    or claim.claim_type != "prerequisite_relationship"
+                    or not isinstance(claim.normalized_value, dict)
+                ):
+                    continue
+                hint = claim.normalized_value.get("prerequisite_assignment_hint")
+                if not isinstance(hint, str) or not hint.strip():
+                    continue
+                match = match_assignment(
+                    AssignmentHint(
+                        course_id=dependent.course_id,
+                        assignment_hint=hint.strip(),
+                    ),
+                    references,
+                )
+                if (
+                    match.assignment_id is None
+                    or match.assignment_id == dependent.id
+                    or match.score < HIGH_MATCH
+                ):
+                    continue
+                relations.setdefault(match.assignment_id, {})[dependent.id] = (
+                    f"assignment-evidence:{link.id}:claim:{claim.id}"
+                )
+        return {
+            prerequisite_id: BlockingProjection(
+                dependent_count=len(dependents),
+                highest_dependent_score=max(
+                    base[dependent_id].total
+                    for dependent_id in dependents
+                    if dependent_id in base
+                ),
+                evidence_ids=tuple(dependents.values()),
+            )
+            for prerequisite_id, dependents in relations.items()
+            if any(dependent_id in base for dependent_id in dependents)
+        }
 
     @staticmethod
     def _calendar_blocks(

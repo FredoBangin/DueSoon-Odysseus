@@ -10,7 +10,7 @@ from typing import Any, Sequence
 from src.duesoon.assignments.effective import EffectiveAssignment
 
 
-POLICY_VERSION = "work-priority-v2"
+POLICY_VERSION = "work-priority-v3"
 COMPLETE = frozenset({"submitted", "graded", "cancelled"})
 
 
@@ -46,18 +46,27 @@ class EffortProjection:
 
 
 @dataclass(frozen=True)
+class BlockingProjection:
+    dependent_count: int
+    highest_dependent_score: int
+    evidence_ids: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class WorkPriorityBreakdown:
     workload_pressure_score: int
     due_proximity_score: int
     course_value_score: int
     overlap_score: int
     instructor_signal_score: int
+    prerequisite_pressure_score: int
     total: int
     band: str
     start_by_at: datetime | None
     slack_minutes: int | None
     usable_minutes_until_due: int | None
     calendar_blocked_minutes: int
+    blocks_assignment_count: int
     estimated_effort_minutes: int | None
     remaining_effort_minutes: int | None
     progress_percent: int | None
@@ -77,6 +86,7 @@ class WorkPriorityBreakdown:
             "course_value": self.course_value_score,
             "overlap": self.overlap_score,
             "instructor_signal": self.instructor_signal_score,
+            "prerequisite_pressure": self.prerequisite_pressure_score,
         }
 
     def to_dict(self) -> dict[str, Any]:
@@ -87,6 +97,7 @@ class WorkPriorityBreakdown:
             "slack_minutes": self.slack_minutes,
             "usable_minutes_until_due": self.usable_minutes_until_due,
             "calendar_blocked_minutes": self.calendar_blocked_minutes,
+            "blocks_assignment_count": self.blocks_assignment_count,
             "estimated_effort_minutes": self.estimated_effort_minutes,
             "remaining_effort_minutes": self.remaining_effort_minutes,
             "progress_percent": self.progress_percent,
@@ -110,15 +121,34 @@ def score_work_priority(
     course_value_percentile: float | None = None,
     usable_hours_per_day: float | None = None,
     calendar_blocked_minutes: int = 0,
+    blocking: BlockingProjection | None = None,
 ) -> WorkPriorityBreakdown:
     """Calculate what should start now; never modifies urgency or reminders."""
 
     if item.submission_status.casefold() in COMPLETE:
         return WorkPriorityBreakdown(
-            0, 0, 0, 0, 0, 0, "MONITOR", None, None, None, 0,
-            effort.estimated_minutes, 0, effort.progress_percent,
-            effort.confidence, "high", effort.source, effort.evidence_ids,
-            effort.assumptions, ("Work is complete",),
+            workload_pressure_score=0,
+            due_proximity_score=0,
+            course_value_score=0,
+            overlap_score=0,
+            instructor_signal_score=0,
+            prerequisite_pressure_score=0,
+            total=0,
+            band="MONITOR",
+            start_by_at=None,
+            slack_minutes=None,
+            usable_minutes_until_due=None,
+            calendar_blocked_minutes=0,
+            blocks_assignment_count=0,
+            estimated_effort_minutes=effort.estimated_minutes,
+            remaining_effort_minutes=0,
+            progress_percent=effort.progress_percent,
+            effort_confidence=effort.confidence,
+            confidence="high",
+            effort_source=effort.source,
+            evidence_ids=effort.evidence_ids,
+            assumptions=effort.assumptions,
+            reasons=("Work is complete",),
         )
 
     now = _utc(now)
@@ -127,6 +157,7 @@ def score_work_priority(
     assumptions = [*effort.assumptions]
     reasons: list[str] = []
     pressure_score = due_score = value_score = overlap_score = instructor_score = 0
+    prerequisite_score = 0
     start_by = None
     slack = usable = None
     blocked = max(0, calendar_blocked_minutes)
@@ -186,7 +217,18 @@ def score_work_priority(
         instructor_score = 5
         reasons.append("Validated instructor workload evidence supports the estimate")
 
-    total = min(100, pressure_score + due_score + value_score + overlap_score + instructor_score)
+    subtotal = pressure_score + due_score + value_score + overlap_score + instructor_score
+    if blocking and blocking.dependent_count > 0:
+        raw_pressure = (
+            15 if blocking.highest_dependent_score >= 70
+            else 10 if blocking.highest_dependent_score >= 45
+            else 5
+        )
+        prerequisite_score = min(raw_pressure, max(0, 100 - subtotal))
+        reasons.append(
+            f"Required before {blocking.dependent_count} other active assignment(s)"
+        )
+    total = subtotal + prerequisite_score
     if remaining is None or due is None:
         band = "MONITOR"
     elif total >= 70:
@@ -204,19 +246,24 @@ def score_work_priority(
         course_value_score=value_score,
         overlap_score=overlap_score,
         instructor_signal_score=instructor_score,
+        prerequisite_pressure_score=prerequisite_score,
         total=total,
         band=band,
         start_by_at=start_by,
         slack_minutes=slack,
         usable_minutes_until_due=usable,
         calendar_blocked_minutes=blocked,
+        blocks_assignment_count=blocking.dependent_count if blocking else 0,
         estimated_effort_minutes=effort.estimated_minutes,
         remaining_effort_minutes=remaining,
         progress_percent=effort.progress_percent,
         effort_confidence=effort.confidence,
         confidence=confidence,
         effort_source=effort.source,
-        evidence_ids=effort.evidence_ids,
+        evidence_ids=tuple(dict.fromkeys((
+            *effort.evidence_ids,
+            *(blocking.evidence_ids if blocking else ()),
+        ))),
         assumptions=tuple(dict.fromkeys(assumptions)),
         reasons=tuple(reasons),
     )

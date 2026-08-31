@@ -238,6 +238,41 @@ def test_exact_assignment_instruction_becomes_admitted_deadline_evidence(
         engine.dispose()
 
 
+def test_prerequisite_claim_requires_an_explicit_prerequisite_assignment_hint(
+    tmp_path: Path,
+) -> None:
+    engine, sessions = database(tmp_path)
+    try:
+        seed(
+            sessions,
+            source_type="assignment",
+            raw_payload={
+                "id": 99,
+                "name": "Lab 4",
+                "description": "Complete Lab 3 before Lab 4.",
+            },
+        )
+        claim = AcademicClaim(
+            claim_type="prerequisite_relationship",
+            assignment_hint="Lab 4",
+            canvas_assignment_id="99",
+            normalized_value={},
+            source_locator="Complete Lab 3 before Lab 4.",
+            confidence_band="high",
+            explicitness="explicit",
+        )
+
+        summary = CanvasEvidencePipeline(
+            sessions,
+            RecordingExtractor((claim,)),
+        ).process_pending()
+
+        assert summary.rejected_claims == 1
+        assert summary.evidence_created == 0
+    finally:
+        engine.dispose()
+
+
 def test_extracted_course_file_text_enters_verified_evidence_pipeline(
     tmp_path: Path,
 ) -> None:

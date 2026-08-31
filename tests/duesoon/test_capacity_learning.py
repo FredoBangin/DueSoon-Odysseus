@@ -165,7 +165,7 @@ def test_completed_assignment_without_effort_becomes_learning_question(
                 "assignment_id": assignment.id,
                 "title": "Midterm Test",
                 "course_name": "Course",
-                "prompt": "About how many minutes did Midterm Test take?",
+                "prompt": "Describe the time, size, difficulty, and blockers for Midterm Test.",
             }
         ]
     finally:

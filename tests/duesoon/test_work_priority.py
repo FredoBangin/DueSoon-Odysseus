@@ -6,14 +6,23 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from src.duesoon.api.app import create_app
-from src.duesoon.assignments.effective import EffectiveAssignment
+from src.duesoon.assignments.effective import EffectiveAssignment, project_canvas_assignment
 from src.duesoon.auth.passwords import hash_password
 from src.duesoon.config.settings import DueSoonSettings
 from src.duesoon.persistence.database import create_engine_from_settings, session_factory
-from src.duesoon.persistence.models import Assignment, CalendarBusyBlock, Course
+from src.duesoon.intelligence.service import assignment_load_options
+from src.duesoon.persistence.models import (
+    Assignment,
+    AssignmentEvidence,
+    CalendarBusyBlock,
+    Claim,
+    Course,
+    SourceRecord,
+)
 from src.duesoon.planning import PlanningService
 from src.duesoon.planning.service import parse_completion_feedback
-from src.duesoon.planning.priority import EffortProjection, score_work_priority
+from src.duesoon.planning.priority import BlockingProjection, EffortProjection, score_work_priority
+from sqlalchemy import select
 
 
 NOW = datetime(2026, 8, 29, 12, tzinfo=UTC)
@@ -84,7 +93,7 @@ def test_large_distant_project_outranks_small_nearer_quiz_by_slack() -> None:
     assert project_score.usable_minutes_until_due is None
     assert project_score.workload_pressure_score > quiz_score.workload_pressure_score
     assert any("capacity" in value.casefold() for value in project_score.assumptions)
-    assert project_score.config_version == "work-priority-v2"
+    assert project_score.config_version == "work-priority-v3"
     assert sum(project_score.factor_breakdown.values()) == project_score.total
 
 
@@ -166,6 +175,90 @@ def test_completion_feedback_extracts_time_work_units_and_difficulty() -> None:
         "difficulty_signal": "very hard",
     }
     assert status == "structured"
+
+
+def test_admitted_same_course_prerequisite_adds_explainable_blocking_pressure(
+    tmp_path: Path,
+) -> None:
+    client, engine = build(tmp_path)
+    sessions = session_factory(engine)
+    with client, sessions() as session:
+        course = Course(canvas_course_id="course-1", name="Course")
+        prerequisite = Assignment(
+            canvas_assignment_id="homework-1",
+            course=course,
+            canonical_title="Homework 1",
+            canvas_due_at=NOW + timedelta(days=3),
+            points_possible=10,
+            published=True,
+            first_seen_at=NOW,
+            last_seen_at=NOW,
+        )
+        dependent = Assignment(
+            canvas_assignment_id="quiz-2",
+            course=course,
+            canonical_title="Quiz 2",
+            canvas_due_at=NOW + timedelta(days=2),
+            points_possible=10,
+            published=True,
+            first_seen_at=NOW,
+            last_seen_at=NOW,
+        )
+        source = SourceRecord(
+            source_system="canvas",
+            source_type="assignment",
+            external_id="quiz-2",
+            course_id=None,
+            observed_at=NOW,
+            content_hash="prerequisite-source",
+            raw_payload={},
+            ingestion_status="claims_extracted",
+        )
+        claim = Claim(
+            source_record=source,
+            claim_type="prerequisite_relationship",
+            assignment_hint="Quiz 2",
+            normalized_value={"prerequisite_assignment_hint": "Homework 1"},
+            source_locator="Complete Homework 1 before Quiz 2.",
+            source_observed_at=NOW,
+            extraction_method="fixture",
+            extractor_version="fixture-v1",
+            extraction_confidence=0.95,
+            validation_status="validated",
+            claim_fingerprint="prerequisite-claim",
+        )
+        session.add_all([prerequisite, dependent, source, claim])
+        session.flush()
+        session.add(
+            AssignmentEvidence(
+                assignment=dependent,
+                claim=claim,
+                course_match_score=1,
+                assignment_match_score=1,
+                authority_score=1,
+                explicitness_score=1,
+                precision="unknown",
+                author_verified=True,
+                source_current=True,
+                disposition="admitted",
+                explanation="Explicit prerequisite",
+            )
+        )
+        session.commit()
+        records = session.scalars(
+            select(Assignment).options(*assignment_load_options()).order_by(Assignment.id)
+        ).all()
+        items = tuple(project_canvas_assignment(record) for record in records)
+
+    scores = PlanningService(sessions).priorities(items, NOW)
+    result = scores[prerequisite.id]
+
+    assert result.blocks_assignment_count == 1
+    assert result.prerequisite_pressure_score > 0
+    assert result.factor_breakdown["prerequisite_pressure"] > 0
+    assert any("Required before" in reason for reason in result.reasons)
+    assert any("assignment-evidence:" in evidence for evidence in result.evidence_ids)
+    engine.dispose()
 
 
 def test_completed_work_never_ranks_active() -> None:
