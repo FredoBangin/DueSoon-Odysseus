@@ -56,6 +56,35 @@
   margin: 12px 0 0;
 }
 
+.duesoon-ask-input::placeholder {
+  color: color-mix(in srgb, var(--fg) 48%, transparent);
+}
+
+.duesoon-ask-submit,
+.duesoon-learning-save {
+  flex: 0 0 auto;
+  min-height: 30px;
+  white-space: nowrap;
+}
+
+.duesoon-learning-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(280px, 1.2fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 24%, transparent);
+}
+
+.duesoon-learning-copy,
+.duesoon-learning-input {
+  min-width: 0;
+}
+
+.duesoon-learning-input {
+  min-height: 32px;
+}
+
 /* Approved split auth composition, built from Odysseus tokens and controls. */
 .login-page {
   --bg: #282c34;
@@ -178,5 +207,13 @@
 
   .login-card {
     padding: 28px 24px;
+  }
+
+  .duesoon-learning-row {
+    grid-template-columns: 1fr;
+  }
+
+  .duesoon-learning-save {
+    width: 100%;
   }
 }

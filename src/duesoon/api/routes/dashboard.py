@@ -87,6 +87,7 @@ class MemoryUpdateRequest(BaseModel):
 class PlanningUpdateRequest(BaseModel):
     estimated_minutes: int | None = Field(default=None, ge=5, le=10_080)
     percent_complete: int | None = Field(default=None, ge=0, le=100)
+    completion_feedback: str | None = Field(default=None, min_length=1, max_length=5000)
     note: str | None = Field(default=None, max_length=2000)
 
 

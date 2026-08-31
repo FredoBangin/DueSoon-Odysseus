@@ -12,6 +12,7 @@ from src.duesoon.config.settings import DueSoonSettings
 from src.duesoon.persistence.database import create_engine_from_settings, session_factory
 from src.duesoon.persistence.models import Assignment, CalendarBusyBlock, Course
 from src.duesoon.planning import PlanningService
+from src.duesoon.planning.service import parse_completion_feedback
 from src.duesoon.planning.priority import EffortProjection, score_work_priority
 
 
@@ -153,6 +154,20 @@ def test_calendar_blocks_remain_context_when_capacity_is_unknown() -> None:
     assert any("calendar" in reason.casefold() for reason in result.reasons)
 
 
+def test_completion_feedback_extracts_time_work_units_and_difficulty() -> None:
+    duration, features, status = parse_completion_feedback(
+        "Took 1 hour and a half, had 18 questions and 3 modules; pointers were very hard."
+    )
+
+    assert duration == 90
+    assert features == {
+        "duration_minutes": 90,
+        "work_units": {"question": 18, "module": 3},
+        "difficulty_signal": "very hard",
+    }
+    assert status == "structured"
+
+
 def test_completed_work_never_ranks_active() -> None:
     item = effective(
         1,
@@ -229,7 +244,7 @@ def test_briefing_orders_work_by_priority_and_owner_corrections_are_append_only(
                 canvas_assignment_id="project",
                 course=course,
                 canonical_title="Capstone Project",
-                canvas_due_at=NOW + timedelta(days=7),
+                canvas_due_at=runtime_now + timedelta(days=7),
                 points_possible=100,
                 published=True,
                 first_seen_at=NOW,
@@ -239,7 +254,7 @@ def test_briefing_orders_work_by_priority_and_owner_corrections_are_append_only(
                 canvas_assignment_id="quiz",
                 course=course,
                 canonical_title="Quiz 2",
-                canvas_due_at=NOW + timedelta(days=2),
+                canvas_due_at=runtime_now + timedelta(days=2),
                 points_possible=10,
                 published=True,
                 first_seen_at=NOW,
@@ -287,9 +302,25 @@ def test_briefing_orders_work_by_priority_and_owner_corrections_are_append_only(
         assert second.json()["effort"]["estimated_minutes"] == 240
         assert second.json()["effort_history_count"] == 2
         assert second.json()["progress_history_count"] == 1
+        feedback = client.post(
+            f"/api/v1/dashboard/assignments/{project_id}/planning",
+            headers=headers,
+            json={
+                "completion_feedback": (
+                    "About 2 hours, 18 questions, and 3 modules; the last module was hard."
+                )
+            },
+        )
+        assert feedback.status_code == 200
+        assert feedback.json()["effort"]["estimated_minutes"] == 120
+        assert feedback.json()["completion_feedback_count"] == 1
+        assert feedback.json()["latest_completion_feedback"]["features"]["work_units"] == {
+            "question": 18,
+            "module": 3,
+        }
         refreshed = client.get("/api/v1/dashboard/briefing").json()
         item = next(value for value in refreshed["upcoming"] if value["id"] == project_id)
         assert item["due_at"] == original_due
-        assert item["work_priority"]["estimated_effort_minutes"] == 240
+        assert item["work_priority"]["estimated_effort_minutes"] == 120
         assert item["work_priority"]["progress_percent"] == 25
     engine.dispose()

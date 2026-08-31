@@ -68,7 +68,6 @@ def test_home_keeps_approved_two_column_briefing_and_embedded_assistant() -> Non
         "cal-event-tag",
         "cal-quickadd-row",
         "cal-quickadd-input",
-        "cal-quickadd-hint",
     ):
         assert inherited_class in source
     assert 'assignmentList("Urgent", data.urgent)' in source
@@ -76,9 +75,11 @@ def test_home_keeps_approved_two_column_briefing_and_embedded_assistant() -> Non
     assert "item.work_priority.band" in source
     assert 'assignmentList("Missing or overdue"' in source
     assert 'assignmentList("Recently completed"' in source
-    assert 'node("button", "Ask")' not in source
+    assert 'node("button", "Ask"' in source
     assert "data.questions" in source
     assert "Help DueSoon learn" in source
+    assert "completion_feedback" in source
+    assert "type = \"text\"" in source
     assert "/planning`" in source
     assert "About how many minutes" not in source
 

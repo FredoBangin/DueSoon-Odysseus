@@ -32,6 +32,7 @@ def test_schema_contains_canvas_core_tables(database) -> None:
         "courses",
         "source_records",
         "assignments",
+        "assignment_completion_observations",
         "assignment_snapshots",
         "submissions",
         "sync_runs",

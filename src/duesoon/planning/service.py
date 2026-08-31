@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from math import ceil
+import re
 from statistics import median
 from typing import Any, Sequence
 
@@ -14,6 +15,7 @@ from src.duesoon.assignments.effective import EffectiveAssignment, project_canva
 from src.duesoon.intelligence.service import assignment_load_options
 from src.duesoon.persistence.models import (
     Assignment,
+    AssignmentCompletionObservation,
     AssignmentEffortEstimate,
     AssignmentProgressObservation,
     CalendarBusyBlock,
@@ -31,6 +33,63 @@ TYPE_PRIORS: tuple[tuple[tuple[str, ...], tuple[int, int, int]], ...] = (
     (("quiz",), (60, 30, 120)),
     (("participation",), (30, 15, 45)),
 )
+
+_COUNT_UNITS = (
+    "question",
+    "module",
+    "chapter",
+    "page",
+    "problem",
+    "section",
+    "exercise",
+)
+
+
+def parse_completion_feedback(value: str) -> tuple[int | None, dict[str, Any], str]:
+    """Extract explicit duration/work-unit facts while preserving the full narrative."""
+
+    text = re.sub(r"\s+", " ", value.strip())
+    lowered = text.casefold()
+    hours = sum(
+        float(match)
+        for match in re.findall(r"\b(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|hr)\b", lowered)
+    )
+    minutes = sum(
+        int(match)
+        for match in re.findall(r"\b(\d+)\s*(?:minutes?|mins?|min)\b", lowered)
+    )
+    if re.search(r"\b(?:1|an?|one)\s+hour\s+and\s+a\s+half\b", lowered):
+        if re.search(r"\b1\s+hour\b", lowered):
+            hours -= 1
+        hours += 1.5
+    elif re.search(r"\b(?:an?|one)\s+hour\b", lowered):
+        hours += 1
+    if re.search(r"\bhalf\s+an?\s+hour\b", lowered):
+        hours += 0.5
+
+    duration = round(hours * 60 + minutes) if hours or minutes else None
+    features: dict[str, Any] = {}
+    if duration is not None:
+        features["duration_minutes"] = duration
+    elapsed = re.search(r"\b(\d+)\s+days?\b", lowered)
+    if elapsed:
+        features["elapsed_days"] = int(elapsed.group(1))
+    work_units: dict[str, int] = {}
+    for amount, unit in re.findall(
+        rf"\b(\d+)\s+({'|'.join(f'{item}s?' for item in _COUNT_UNITS)})\b",
+        lowered,
+    ):
+        singular = unit[:-1] if unit.endswith("s") else unit
+        work_units[singular] = int(amount)
+    if work_units:
+        features["work_units"] = work_units
+    difficulty = next(
+        (label for label in ("very hard", "hard", "difficult", "easy") if label in lowered),
+        None,
+    )
+    if difficulty:
+        features["difficulty_signal"] = difficulty
+    return duration, features, "structured" if features else "narrative_only"
 
 
 class PlanningService:
@@ -107,24 +166,21 @@ class PlanningService:
                     AssignmentProgressObservation.id,
                 )
             ).all()
+            completion_rows = session.scalars(
+                select(AssignmentCompletionObservation)
+                .where(AssignmentCompletionObservation.assignment_id == assignment_id)
+                .order_by(
+                    AssignmentCompletionObservation.created_at,
+                    AssignmentCompletionObservation.id,
+                )
+            ).all()
             effort = self._effort_projection(
                 selected,
                 effort_rows[-1] if effort_rows else None,
                 progress_rows[-1] if progress_rows else None,
             )
-            percentiles = self._course_percentiles(records)
-            calendar_blocks = self._calendar_blocks(session, items, now)
-        projected = next(item for item in items if item.assignment_id == assignment_id)
-        priority = score_work_priority(
-            projected,
-            items,
-            effort,
-            now,
-            course_value_percentile=percentiles.get(assignment_id),
-            calendar_blocked_minutes=self._blocked_minutes(
-                calendar_blocks, now, projected.operational_due_at
-            ),
-        )
+        priority = self.priorities(items, now)[assignment_id]
+        latest_completion = completion_rows[-1] if completion_rows else None
         return {
             "assignment_id": assignment_id,
             "effort": {
@@ -140,6 +196,15 @@ class PlanningService:
             "priority": priority.to_dict(),
             "effort_history_count": len(effort_rows),
             "progress_history_count": len(progress_rows),
+            "completion_feedback_count": len(completion_rows),
+            "latest_completion_feedback": (
+                {
+                    "duration_minutes": latest_completion.duration_minutes,
+                    "features": latest_completion.extracted_features,
+                    "parsing_status": latest_completion.parsing_status,
+                }
+                if latest_completion else None
+            ),
             "protections": {
                 "changes_deadline": False,
                 "changes_urgency": False,
@@ -153,15 +218,24 @@ class PlanningService:
         *,
         estimated_minutes: int | None = None,
         percent_complete: int | None = None,
+        completion_feedback: str | None = None,
         note: str | None = None,
     ) -> dict[str, Any]:
-        if estimated_minutes is None and percent_complete is None:
-            raise ValueError("effort or progress value is required")
+        clean_feedback = completion_feedback.strip()[:5000] if completion_feedback else None
+        if estimated_minutes is None and percent_complete is None and not clean_feedback:
+            raise ValueError("effort, progress, or completion feedback is required")
         if estimated_minutes is not None and not 5 <= estimated_minutes <= 10_080:
             raise ValueError("estimated minutes must be between 5 and 10080")
         if percent_complete is not None and not 0 <= percent_complete <= 100:
             raise ValueError("progress percent must be between 0 and 100")
         clean_note = note.strip()[:2000] if note and note.strip() else None
+        parsed_duration = None
+        parsed_features: dict[str, Any] = {}
+        parsing_status = "narrative_only"
+        if clean_feedback:
+            parsed_duration, parsed_features, parsing_status = parse_completion_feedback(
+                clean_feedback
+            )
         with self.sessions() as session:
             if session.get(Assignment, assignment_id) is None:
                 raise LookupError("assignment not found")
@@ -179,6 +253,20 @@ class PlanningService:
                         note=clean_note,
                     )
                 )
+            elif parsed_duration is not None:
+                session.add(
+                    AssignmentEffortEstimate(
+                        assignment_id=assignment_id,
+                        estimated_minutes=parsed_duration,
+                        lower_minutes=parsed_duration,
+                        upper_minutes=parsed_duration,
+                        confidence="high",
+                        source_kind="owner_completion_feedback",
+                        evidence_id=None,
+                        owner_confirmed=True,
+                        note=clean_feedback,
+                    )
+                )
             if percent_complete is not None:
                 session.add(
                     AssignmentProgressObservation(
@@ -186,6 +274,16 @@ class PlanningService:
                         percent_complete=percent_complete,
                         source_kind="owner",
                         note=clean_note,
+                    )
+                )
+            if clean_feedback:
+                session.add(
+                    AssignmentCompletionObservation(
+                        assignment_id=assignment_id,
+                        feedback_text=clean_feedback,
+                        duration_minutes=parsed_duration,
+                        extracted_features=parsed_features,
+                        parsing_status=parsing_status,
                     )
                 )
             session.commit()
@@ -299,7 +397,7 @@ class PlanningService:
                     "assignment_id": item.id,
                     "title": item.canonical_title,
                     "course_name": item.course.name,
-                    "prompt": f"About how many minutes did {item.canonical_title} take?",
+                    "prompt": f"Describe the time, size, difficulty, and blockers for {item.canonical_title}.",
                 }
                 for item in eligible[: max(1, min(limit, 10))]
             ]

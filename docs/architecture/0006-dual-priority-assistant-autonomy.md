@@ -65,8 +65,12 @@ selected over material alternatives.
   but DueSoon must not invent a fixed number of usable hours per day. Connected read-only calendar
   blocks, especially work shifts, can later supply usable windows.
 - Capacity learning requires more than Canvas submission timestamps. Submission outcomes may trigger
-  owner questions about time spent; progress history, confirmed effort, and calendar availability
-  can then produce a reviewable, reversible capacity estimate after enough observations exist.
+  owner questions about the completed work. Owner feedback is free-form narrative, not a minutes-only
+  field: DueSoon preserves the full response and deterministically extracts explicit duration,
+  question/module/page counts, elapsed days, and difficulty signals. Richer model interpretation may
+  add reviewable features later, but ambiguous narrative never becomes invented exact effort.
+  Progress history, confirmed effort, and calendar availability can then produce a reviewable,
+  reversible capacity estimate after enough observations exist.
 - Initial learned capacity requires three confirmed completed outcomes and uses their median
   remaining-effort pace. Due-next ordering stays chronological; work-next ordering uses priority.
 - Calendar planning stores privacy-minimized busy intervals and hashed event identifiers, not event

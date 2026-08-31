@@ -12,21 +12,20 @@ function learningCard(items) {
   const card = node("article", "", "admin-card duesoon-card-wide");
   card.append(
     node("h2", "Help DueSoon learn"),
-    node("p", "Optional completion feedback improves future effort estimates. It never changes deadlines or reminders.", "admin-toggle-sub"),
+    node("p", "Tell DueSoon what completed work was actually like—time, size, difficulty, or what slowed you down. This improves planning only; it never changes deadlines or reminders.", "admin-toggle-sub"),
   );
   for (const item of items) {
-    const form = node("form", "", "admin-toggle-row");
-    const copy = node("div", "");
-    copy.append(node("div", item.prompt, "admin-toggle-label"), node("div", item.course_name, "admin-toggle-sub"));
+    const form = node("form", "", "duesoon-learning-row");
+    const copy = node("div", "", "duesoon-learning-copy");
+    copy.append(node("div", `How did ${item.title} go?`, "admin-toggle-label"), node("div", item.course_name, "admin-toggle-sub"));
     const input = document.createElement("input");
-    input.className = "settings-input";
-    input.type = "number";
-    input.min = "5";
-    input.max = "10080";
+    input.className = "settings-input duesoon-learning-input";
+    input.type = "text";
+    input.maxLength = 5000;
     input.required = true;
-    input.placeholder = "Minutes";
-    input.setAttribute("aria-label", `Minutes spent on ${item.title}`);
-    const save = node("button", "Save", "confirm-btn confirm-btn-primary");
+    input.placeholder = "Example: About 2 hours, 18 questions; the last module was hard";
+    input.setAttribute("aria-label", `Completion feedback for ${item.title}`);
+    const save = node("button", "Save feedback", "confirm-btn confirm-btn-primary duesoon-learning-save");
     save.type = "submit";
     const result = node("span", "", "admin-toggle-sub");
     form.append(copy, input, save, result);
@@ -35,8 +34,7 @@ function learningCard(items) {
       save.disabled = true;
       try {
         await post(`/api/v1/dashboard/assignments/${item.assignment_id}/planning`, {
-          estimated_minutes: Number(input.value),
-          note: "Owner completion effort estimate",
+          completion_feedback: input.value.trim(),
         });
         input.disabled = true;
         result.textContent = "Saved";
@@ -106,7 +104,7 @@ function assistantCard(onAsk) {
     node("h2", "Ask DueSoon"),
     node(
       "p",
-      "Ask about deadlines, missing work, workload, reminders, or what changed.",
+      "Ask anything. DueSoon answers normally, then uses connected school evidence when your question needs it.",
       "admin-toggle-sub",
     ),
   );
@@ -116,17 +114,15 @@ function assistantCard(onAsk) {
   icon.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
 
   const input = document.createElement("input");
-  input.className = "cal-quickadd-input";
+  input.className = "cal-quickadd-input duesoon-ask-input";
   input.type = "text";
-  input.placeholder = " ";
+  input.placeholder = "What do I need to know today?";
   input.maxLength = 500;
   input.setAttribute("aria-label", "Ask DueSoon about school");
 
-  const hint = node("span", "", "cal-quickadd-hint");
-  hint.setAttribute("aria-hidden", "true");
-  hint.innerHTML = '<span class="qa-hint-accent">Ask DueSoon</span> — any updates on school stuff? <svg class="qa-hint-enter" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 10 4 15 9 20"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/></svg>';
-
-  form.append(icon, input, hint);
+  const ask = node("button", "Ask", "confirm-btn confirm-btn-primary duesoon-ask-submit");
+  ask.type = "submit";
+  form.append(icon, input, ask);
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     const question = input.value.trim();

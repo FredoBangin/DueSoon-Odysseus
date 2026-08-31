@@ -264,6 +264,23 @@ class AssignmentProgressObservation(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
+class AssignmentCompletionObservation(Base):
+    """Owner narrative about completed work, plus bounded deterministic features."""
+
+    __tablename__ = "assignment_completion_observations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    assignment_id: Mapped[int] = mapped_column(
+        ForeignKey("assignments.id", ondelete="RESTRICT"), index=True
+    )
+    feedback_text: Mapped[str] = mapped_column(Text)
+    duration_minutes: Mapped[int | None] = mapped_column(Integer)
+    extracted_features: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    parsing_status: Mapped[str] = mapped_column(String(30))
+    source_kind: Mapped[str] = mapped_column(String(50), default="owner_completion_feedback")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
 class CalendarBusyBlock(Base):
     """Sanitized read-only calendar interval; event titles are never persisted."""
 
