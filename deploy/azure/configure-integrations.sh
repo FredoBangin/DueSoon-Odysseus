@@ -7,8 +7,8 @@ runtime_env=/etc/duesoon/duesoon.env
 [[ -f $runtime_env ]] || { echo "DueSoon runtime is not provisioned" >&2; exit 1; }
 
 mode=${1:-all}
-[[ $mode == model || $mode == google || $mode == all ]] || {
-  echo "Usage: $0 [model|google|all]" >&2
+[[ $mode == model || $mode == model-off || $mode == google || $mode == all ]] || {
+  echo "Usage: $0 [model|model-off|google|all]" >&2
   exit 2
 }
 
@@ -39,6 +39,16 @@ configure_model() {
   mv "$tmp" "$runtime_env"
   unset api_key
   echo "Model assistant configured; secret was not printed"
+}
+
+disable_model() {
+  local tmp
+  tmp=$(mktemp /etc/duesoon/duesoon.env.XXXXXX)
+  grep -Ev '^DUESOON_MODEL_' "$runtime_env" > "$tmp"
+  printf '%s\n' "DUESOON_MODEL_ENABLED=false" >> "$tmp"
+  chmod 0600 "$tmp"
+  mv "$tmp" "$runtime_env"
+  echo "Model assistant disabled; stored model credentials removed"
 }
 
 configure_google() {
@@ -75,5 +85,6 @@ configure_google() {
 }
 
 [[ $mode == model || $mode == all ]] && configure_model
+[[ $mode == model-off ]] && disable_model
 [[ $mode == google || $mode == all ]] && configure_google
 echo "Restart DueSoon to load the new integration settings"

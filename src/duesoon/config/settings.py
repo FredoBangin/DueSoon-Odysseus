@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from typing import Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -78,6 +79,12 @@ class DueSoonSettings(BaseSettings):
 
         if not self.timezone or any(character.isspace() for character in self.timezone):
             raise ValueError("DUESOON_TIMEZONE must be a non-empty IANA timezone name")
+        try:
+            ZoneInfo(self.timezone)
+        except ZoneInfoNotFoundError as exc:
+            raise ValueError(
+                "DUESOON_TIMEZONE must name an available IANA timezone"
+            ) from exc
 
         if self.public_origin:
             self.public_origin = self.public_origin.rstrip("/")

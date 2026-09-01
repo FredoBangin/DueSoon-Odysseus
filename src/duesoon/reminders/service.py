@@ -191,7 +191,10 @@ class ReminderService:
         try:
             local_now = now.astimezone(ZoneInfo(settings.timezone))
         except ZoneInfoNotFoundError:
-            local_now = now
+            # Sending against UTC would violate the configured local hour. A
+            # missing timezone database is a readiness/configuration failure,
+            # not permission to guess when the owner wants a briefing.
+            return None
         if local_now.hour < settings.daily_digest_hour:
             return None
         local_day = local_now.date().isoformat()

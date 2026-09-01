@@ -1,6 +1,6 @@
 # DueSoon Core Backend Completion Plan
 
-**Status:** Approved direction; implementation pending
+**Status:** Superseded for execution tracking by `2026-08-31-duesoon-master-completion-plan.md`; retained as historical approved direction
 **Date:** 2026-08-28
 **Foundation:** `DUESOON_CODEX_CONTEXT.md`
 **Decision record:** `docs/architecture/0006-dual-priority-assistant-autonomy.md`

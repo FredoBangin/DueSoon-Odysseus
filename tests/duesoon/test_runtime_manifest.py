@@ -23,8 +23,18 @@ def test_runtime_requirements_are_foundation_only() -> None:
         "pydantic-settings==2.15.0",
         "pypdf==6.16.2",
         "SQLAlchemy==2.0.52",
+        "tzdata==2026.3",
         "uvicorn==0.52.4",
     }
+
+
+def test_integration_configuration_can_remove_model_credentials() -> None:
+    script = read("deploy/azure/configure-integrations.sh")
+
+    assert "model-off" in script
+    assert "grep -Ev '^DUESOON_MODEL_'" in script
+    assert '"DUESOON_MODEL_ENABLED=false"' in script
+    assert "stored model credentials removed" in script
 
 
 def test_active_manifests_exclude_odysseus_tooling() -> None:

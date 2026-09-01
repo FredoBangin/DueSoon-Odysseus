@@ -298,6 +298,34 @@ def test_retryable_delivery_rechecks_canvas_again_before_retry(tmp_path: Path) -
         engine.dispose()
 
 
+def test_daily_digest_suppresses_when_configured_timezone_is_unavailable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now_ref = [datetime(2026, 8, 27, 12, 1, tzinfo=UTC)]
+    engine, _, canvas, publisher, service = build_reminder_service(
+        tmp_path,
+        now_ref=now_ref,
+        due_at=now_ref[0] + timedelta(days=3),
+        daily_digest_enabled=True,
+    )
+
+    def missing_timezone(_: str):
+        from zoneinfo import ZoneInfoNotFoundError
+
+        raise ZoneInfoNotFoundError("test timezone unavailable")
+
+    monkeypatch.setattr("src.duesoon.reminders.service.ZoneInfo", missing_timezone)
+    try:
+        summary = service.run_once()
+
+        assert summary.sent == 0
+        assert canvas.refresh_calls == 0
+        assert publisher.calls == []
+    finally:
+        engine.dispose()
+
+
 def test_submitted_assignment_is_suppressed_after_immediate_recheck(tmp_path: Path) -> None:
     now_ref = [datetime(2026, 8, 27, 12, 0, tzinfo=UTC)]
     engine, sessions, canvas, publisher, service = build_reminder_service(

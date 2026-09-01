@@ -2001,6 +2001,6 @@ is never automatic.
 DueSoon exposes a verifiable decision trace rather than private model chain-of-thought. The trace
 shows sources consulted, evidence references, assumptions, confidence, deterministic calculations,
 tool/application activity, learned changes, policy/model versions, and a concise alternative
-summary. Full implementation order and acceptance criteria live in
-`docs/superpowers/plans/2026-08-28-duesoon-core-backend-completion.md`; the governing decision is
+summary. The current full implementation order, external-research decisions, and acceptance criteria live in
+`docs/superpowers/plans/2026-08-31-duesoon-master-completion-plan.md`; the governing decision is
 `docs/architecture/0006-dual-priority-assistant-autonomy.md`.

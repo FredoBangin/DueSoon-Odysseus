@@ -90,6 +90,11 @@ def test_sqlite_scheduler_rejects_multiple_workers() -> None:
         )
 
 
+def test_settings_reject_unavailable_timezone() -> None:
+    with pytest.raises(ValidationError, match="available IANA timezone"):
+        DueSoonSettings(_env_file=None, timezone="Mars/Olympus_Mons")
+
+
 def test_scheduler_requires_canvas_ingestion() -> None:
     with pytest.raises(ValidationError, match="Canvas ingestion"):
         DueSoonSettings(_env_file=None, scheduler_enabled=True)
