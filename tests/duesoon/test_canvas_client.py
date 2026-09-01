@@ -116,6 +116,25 @@ def test_read_only_academic_content_endpoints() -> None:
     assert by_path["/api/v1/courses/42/files"].url.params["sort"] == "updated_at"
 
 
+def test_get_page_encodes_module_page_url_as_one_path_segment() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json={"url": "week 1/overview", "body": "Read"})
+
+    client = CanvasClient(settings(), transport=httpx.MockTransport(handler))
+    try:
+        page = client.get_page("42", "week 1/overview")
+    finally:
+        client.close()
+
+    assert page["body"] == "Read"
+    assert requests[0].url.raw_path == (
+        b"/api/v1/courses/42/pages/week%201%2Foverview"
+    )
+
+
 def test_cross_origin_pagination_is_rejected() -> None:
     def handler(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(

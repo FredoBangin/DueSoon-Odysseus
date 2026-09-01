@@ -141,6 +141,7 @@ class CanvasContentSyncService:
         skipped: dict[str, str],
     ) -> None:
         prefix = f"course:{canvas_course_id}"
+        module_page_urls: set[str] = set()
         modules = self._optional(
             f"{prefix}:modules",
             lambda: self.client.list_modules(canvas_course_id),
@@ -164,6 +165,9 @@ class CanvasContentSyncService:
                 item_id = str(item.get("id", ""))
                 if item_id:
                     records.append(("module_item", item_id, course_id, item))
+                page_url = item.get("page_url")
+                if isinstance(page_url, str) and page_url:
+                    module_page_urls.add(page_url)
 
         for item in self._optional(
             f"{prefix}:files", lambda: self.client.list_files(canvas_course_id), skipped
@@ -182,10 +186,15 @@ class CanvasContentSyncService:
         pages = self._optional(
             f"{prefix}:pages", lambda: self.client.list_pages(canvas_course_id), skipped
         )
+        pages_by_url: dict[str, dict[str, Any]] = {}
         for page in pages:
             page_url = str(page.get("url", ""))
-            if not page_url:
-                continue
+            if page_url:
+                pages_by_url.setdefault(page_url, page)
+        for page_url in sorted(module_page_urls):
+            pages_by_url.setdefault(page_url, {"url": page_url})
+
+        for page_url, page in pages_by_url.items():
             try:
                 detail = self.client.get_page(canvas_course_id, page_url)
             except CanvasAPIError:

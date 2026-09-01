@@ -5,6 +5,7 @@ from pathlib import Path
 
 from sqlalchemy import func, select
 
+from src.duesoon.canvas.client import CanvasAPIError
 from src.duesoon.canvas.content_sync import CanvasContentSyncService
 from src.duesoon.config.settings import DueSoonSettings
 from src.duesoon.persistence.database import (
@@ -133,3 +134,53 @@ def test_conversation_course_matching_stays_unresolved_for_multiple_courses() ->
     assert CanvasContentSyncService._conversation_course_id(
         {"course_ids": ["42", "43"]}, courses
     ) is None
+
+
+def test_module_linked_pages_sync_when_page_listing_is_unavailable(
+    tmp_path: Path,
+) -> None:
+    class ModulePageStub(AcademicContentStub):
+        def list_module_items(self, course_id: str, module_id: str):
+            return [{
+                "id": 5,
+                "title": "Course overview",
+                "type": "Page",
+                "page_url": "course-overview",
+            }]
+
+        def list_files(self, course_id: str):
+            return []
+
+        def list_pages(self, course_id: str):
+            raise CanvasAPIError("Canvas request failed with HTTP 404", status_code=404)
+
+        def get_page(self, course_id: str, page_url: str):
+            assert page_url == "course-overview"
+            return {"url": page_url, "body": "Midterm date is in this page."}
+
+    settings = DueSoonSettings(
+        _env_file=None,
+        environment="test",
+        database_url=f"sqlite:///{(tmp_path / 'module-page.db').as_posix()}",
+    )
+    engine = create_engine_from_settings(settings)
+    create_schema(engine)
+    sessions = session_factory(engine)
+    with sessions() as session:
+        session.add(Course(canvas_course_id="42", name="Biology", active=True))
+        session.commit()
+
+    summary = CanvasContentSyncService(
+        ModulePageStub(),
+        sessions,
+        clock=lambda: datetime(2026, 9, 1, tzinfo=UTC),
+    ).sync()
+
+    assert summary.skipped_sources["course:42:pages"] == "http_404"
+    with sessions() as session:
+        page = session.scalar(
+            select(SourceRecord).where(SourceRecord.source_type == "page")
+        )
+        assert page is not None
+        assert page.external_id == "42:course-overview"
+        assert page.raw_payload["body"] == "Midterm date is in this page."

@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from typing import Any
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import quote, urljoin, urlsplit
 
 import httpx
 
@@ -195,7 +195,10 @@ class CanvasClient:
 
     def get_page(self, course_id: str, page_url: str) -> dict[str, Any]:
         """Return one course wiki page including its body."""
-        return self._get_object(f"/api/v1/courses/{course_id}/pages/{page_url}")
+        encoded_page_url = quote(page_url, safe="")
+        return self._get_object(
+            f"/api/v1/courses/{course_id}/pages/{encoded_page_url}"
+        )
 
     def get_submission(self, course_id: str, assignment_id: str) -> dict[str, Any]:
         return self._get_object(
