@@ -40,6 +40,7 @@ class EffectiveAssignment:
     deadline_resolution_explanation: str = ""
     conflicting_due_at: tuple[datetime, ...] = ()
     persisted_deadline_evidence_count: int = 0
+    graded_at: datetime | None = None
 
 
 def _utc(value: datetime) -> datetime:
@@ -109,6 +110,7 @@ def project_canvas_assignment(
         points_possible=assignment.points_possible,
         submission_status=status,
         submitted_at=submission.submitted_at if submission is not None else None,
+        graded_at=submission.graded_at if submission is not None else None,
         due_at_precision=resolution.precision,
         deadline_resolution_explanation=resolution.explanation,
         conflicting_due_at=resolution.conflicting_due_at,

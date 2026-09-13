@@ -61,18 +61,20 @@ function dueLabel(item) {
   }).format(due);
 }
 
-function assignmentList(title, items, mode = "urgency") {
+function assignmentList(title, items, mode = "urgency", emptyText = "Nothing here right now.") {
   const card = node("article", "", "admin-card");
   card.append(node("h2", title));
 
   if (!items.length) {
-    card.append(node("p", "Nothing here right now.", "admin-toggle-sub"));
+    card.append(node("p", emptyText, "admin-toggle-sub"));
     return card;
   }
 
   const list = node("div", "", "duesoon-assignment-list");
   for (const item of items) {
     const row = node("div", "", "cal-event-item");
+    const complete = ["submitted", "graded"].includes(item.submission_status);
+    if (complete) row.classList.add("duesoon-calendar-complete");
     const dot = node("span", "", "cal-event-dot");
     dot.style.background = item.course_color;
 
@@ -86,10 +88,13 @@ function assignmentList(title, items, mode = "urgency") {
       ),
     );
 
-    const label = mode === "priority" ? item.work_priority.band : item.urgency.level;
+    const label = complete ? "Completed" : mode === "priority" ? item.work_priority.display_label : item.urgency.level;
     const reasons = mode === "priority" ? item.work_priority.reasons : item.urgency.reasons;
     const badge = node("span", label, "cal-event-tag");
     badge.title = (reasons || []).join(" · ");
+    if (mode === "priority" && !complete) {
+      information.append(node("div", item.work_priority.state_reason, "cal-event-time"));
+    }
     row.append(dot, information, badge);
     list.append(row);
   }
@@ -98,13 +103,15 @@ function assignmentList(title, items, mode = "urgency") {
   return card;
 }
 
-function assistantCard(onAsk) {
+function assistantCard(onAsk, status = {}) {
   const card = node("article", "", "admin-card duesoon-card-wide");
   card.append(
     node("h2", "Ask DueSoon"),
     node(
       "p",
-      "Ask anything. DueSoon answers normally, then uses connected school evidence when your question needs it.",
+      status.availability === "configured_unverified"
+        ? "Ask anything. Exact school facts use deterministic checks; broader answers need the configured AI provider to respond."
+        : "AI interpretation is offline. Exact Canvas deadlines, completion checks, and recorded workload facts remain available.",
       "admin-toggle-sub",
     ),
   );
@@ -118,15 +125,23 @@ function assistantCard(onAsk) {
   input.type = "text";
   input.placeholder = "What do I need to know today?";
   input.maxLength = 500;
-  input.setAttribute("aria-label", "Ask DueSoon about school");
+  input.setAttribute("aria-label", "Message DueSoon");
+  input.required = true;
 
   const ask = node("button", "Ask", "confirm-btn confirm-btn-primary duesoon-ask-submit");
   ask.type = "submit";
   form.append(icon, input, ask);
-  form.addEventListener("submit", (event) => {
+  form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const question = input.value.trim();
-    if (question) onAsk(question);
+    if (!question || ask.disabled) return;
+    ask.disabled = true;
+    try {
+      await onAsk(question);
+      input.value = "";
+    } finally {
+      ask.disabled = false;
+    }
   });
   card.append(form);
   return card;
@@ -135,16 +150,26 @@ function assistantCard(onAsk) {
 export function renderHome(root, data, onAsk) {
   root.replaceChildren();
   const grid = node("div", "", "duesoon-dashboard-grid");
+  const next = data.next_due?.[0];
+  const urgentEmpty = next
+    ? `No work currently meets urgent criteria. Next known deadline: ${next.title}, ${dueLabel(next)}.`
+    : "No work currently meets urgent criteria. Undated work still needs deadline evidence; an empty Urgent panel does not mean everything is done.";
   grid.append(
-    assistantCard(onAsk),
-    assignmentList("Urgent", data.urgent),
+    assistantCard(onAsk, data.assistant_status),
+    assignmentList("Urgent", data.urgent, "urgency", urgentEmpty),
     assignmentList("Work priority", data.upcoming, "priority"),
-    assignmentList("Missing or overdue", [...data.missing, ...data.overdue]),
+    assignmentList("Missing or overdue", [...new Map([...data.missing, ...data.overdue].map(item => [item.id, item])).values()]),
     assignmentList("Recently completed", data.completed_recently),
   );
+  if (data.needs_information?.length) {
+    const count = data.counts?.undated_active ?? data.needs_information.length;
+    const needsInfo = assignmentList(`Needs deadline evidence (${count})`, data.needs_information, "priority");
+    if (count > data.needs_information.length) needsInfo.append(node("p", `Showing ${data.needs_information.length} of ${count}. These are active assignments, not completed work.`, "admin-toggle-sub"));
+    grid.append(needsInfo);
+  }
   const learning = learningCard(data.questions);
   if (learning) grid.append(learning);
   root.append(grid);
 }
 
-export {node};
+export {node, assistantCard};

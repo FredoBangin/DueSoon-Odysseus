@@ -121,7 +121,23 @@ def test_unknown_effort_is_visible_and_never_invented() -> None:
     assert result.slack_minutes is None
     assert result.confidence == "low"
     assert result.band == "MONITOR"
+    assert result.state == "NEEDS_EFFORT"
+    assert result.to_dict()["display_label"] == "Needs effort estimate"
     assert "Effort is unknown" in result.reasons
+
+
+def test_priority_presentation_states_do_not_change_urgency_or_deadlines() -> None:
+    undated = effective(1, title="Unknown deadline", due_in=None)
+    result = score_work_priority(undated, (undated,), EffortProjection.unknown(), NOW)
+    assert result.state == "NEEDS_DEADLINE"
+    assert "Effort also" in result.state_reason
+    assert undated.operational_due_at is None
+
+    complete = effective(2, title="Done", due_in=timedelta(days=1), status="submitted")
+    result = score_work_priority(complete, (complete,), effort(60), NOW)
+    assert result.state == "COMPLETE"
+    assert result.to_dict()["display_label"] == "Completed"
+    assert result.total == 0
 
 
 def test_known_calendar_blocks_reduce_learned_usable_capacity() -> None:

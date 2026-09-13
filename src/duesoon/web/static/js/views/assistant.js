@@ -1,5 +1,5 @@
 import {post} from "../api.js";
-import {node} from "./home.js";
+import {node,assistantCard} from "./home.js";
 
 function attachDecisionTrace(body,value){
   const trace=value.decision_trace;
@@ -70,12 +70,10 @@ function attachFeedback(reply,value){
   reply.append(controls);
 }
 
-export function renderAssistant(root,initial=""){
+export function renderAssistant(root,initial="",status={}){
   root.replaceChildren();
-  const intro=node("article","","admin-card");
-  intro.append(node("h2","DueSoon assistant"),node("p","Ask from the Odysseus composer below about deadlines, missing work, workload, reminders, or what changed. Answers never change canonical deadlines.","admin-toggle-sub"));
   const log=node("div");
-  root.append(intro,log);
+  root.append(assistantCard(ask,status),log);
 
   async function ask(question){
     const user=node("div","","msg msg-user");
@@ -108,5 +106,5 @@ export function renderAssistant(root,initial=""){
       log.append(reply);
     }
   }
-  if(initial) ask(initial);
+  if(initial) return ask(initial);
 }

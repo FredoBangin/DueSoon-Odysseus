@@ -81,6 +81,10 @@ class BriefingService:
             ],
             "urgency": urgency.to_dict(),
             "work_priority": priority.to_dict(),
+            "completed_at": (
+                _utc(item.submitted_at or item.graded_at).isoformat()
+                if item.submitted_at or item.graded_at else None
+            ),
             "course_color": _color(item.canvas_course_id),
         }
 
@@ -128,10 +132,14 @@ class BriefingService:
             self._view(item, items, now, priorities[item.assignment_id])
             for item in items
         ]
-        incomplete = [v for v in views if v["submission_status"] not in {"submitted", "graded"}]
+        incomplete = [v for v in views if v["submission_status"] not in {"submitted", "graded", "cancelled"}]
         due_items = [v for v in incomplete if v["due_at"]]
+        undated = sorted(
+            (v for v in incomplete if not v["due_at"]),
+            key=lambda value: (str(value["course_name"]), str(value["title"]), int(value["id"])),
+        )
         next_due = sorted(
-            due_items,
+            (v for v in due_items if datetime.fromisoformat(str(v["due_at"])) >= now),
             key=lambda value: (str(value["due_at"]), int(value["id"])),
         )
         due_items.sort(
@@ -145,6 +153,14 @@ class BriefingService:
         overdue = [v for v in due_items if datetime.fromisoformat(str(v["due_at"])) < now]
         missing = [v for v in incomplete if v["submission_status"] == "missing"]
         completed = [v for v in views if v["submission_status"] in {"submitted", "graded"}]
+        completed.sort(
+            key=lambda value: (str(value["completed_at"] or ""), int(value["id"])),
+            reverse=True,
+        )
+        recent_completed = [
+            v for v in completed if v["completed_at"]
+            and now - timedelta(days=14) <= datetime.fromisoformat(str(v["completed_at"])) <= now
+        ]
         deadline_changes = [
             change
             for item in items
@@ -157,7 +173,7 @@ class BriefingService:
         with self.sessions() as session:
             latest_sync = session.scalar(
                 select(SyncRun)
-                .where(SyncRun.status.in_(("completed", "success")))
+                .where(SyncRun.source_system == "canvas", SyncRun.status.in_(("completed", "success")))
                 .order_by(SyncRun.finished_at.desc())
             )
             reminder_counts = dict(Counter(session.scalars(select(ReminderEvent.status)).all()))
@@ -167,13 +183,19 @@ class BriefingService:
             "generated_at": now.isoformat(), "timezone": self.settings.timezone,
             "urgent": urgent, "upcoming": due_items[:10], "next_due": next_due[:10],
             "overdue": overdue,
-            "missing": missing, "completed_recently": completed[:10],
+            "missing": missing, "completed_recently": recent_completed[:10],
+            "needs_information": undated[:10],
+            "counts": {
+                "published": len(views), "active": len(incomplete), "completed": len(completed),
+                "urgent": len(urgent), "dated_active": len(due_items), "undated_active": len(undated),
+                "overdue": len(overdue), "missing": len(missing),
+            },
             "deadline_changes": deadline_changes[:10],
             "reminder_counts": reminder_counts,
             "freshness": {"canvas_status": "stale" if stale else "fresh", "last_synced_at": synced_at},
             "questions": self.planning.learning_questions(),
             "capacity_learning": self.planning.capacity_learning(),
-            "limitations": (
+            "limitations": ([f"{len(undated)} active assignments lack a resolved operational deadline."] if undated else []) + (
                 []
                 if has_persisted_deadline_evidence
                 else ["Deadline evidence is currently Canvas-only"]

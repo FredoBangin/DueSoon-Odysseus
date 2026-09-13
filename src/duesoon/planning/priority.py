@@ -76,6 +76,8 @@ class WorkPriorityBreakdown:
     evidence_ids: tuple[str, ...]
     assumptions: tuple[str, ...]
     reasons: tuple[str, ...]
+    state: str
+    state_reason: str
     config_version: str = POLICY_VERSION
 
     @property
@@ -93,6 +95,16 @@ class WorkPriorityBreakdown:
         return {
             "score": self.total,
             "band": self.band,
+            "state": self.state,
+            "display_label": {
+                "COMPLETE": "Completed",
+                "NEEDS_DEADLINE": "Needs deadline",
+                "NEEDS_EFFORT": "Needs effort estimate",
+                "NOW": "Start now",
+                "NEXT": "Start next",
+                "LATER": "Start later",
+            }[self.state],
+            "state_reason": self.state_reason,
             "start_by_at": self.start_by_at.isoformat() if self.start_by_at else None,
             "slack_minutes": self.slack_minutes,
             "usable_minutes_until_due": self.usable_minutes_until_due,
@@ -149,6 +161,8 @@ def score_work_priority(
             evidence_ids=effort.evidence_ids,
             assumptions=effort.assumptions,
             reasons=("Work is complete",),
+            state="COMPLETE",
+            state_reason="Canvas confirms this work is complete.",
         )
 
     now = _utc(now)
@@ -240,6 +254,17 @@ def score_work_priority(
     else:
         band = "MONITOR"
     confidence = "medium" if usable_hours_per_day is not None else "low"
+    if due is None:
+        state = "NEEDS_DEADLINE"
+        state_reason = "No resolved operational deadline is available."
+        if remaining is None:
+            state_reason += " Effort also needs an estimate."
+    elif remaining is None:
+        state = "NEEDS_EFFORT"
+        state_reason = "A deadline is known, but effort is unknown; start order is not reliable."
+    else:
+        state = band if band != "MONITOR" else "LATER"
+        state_reason = reasons[0] if reasons else "Current workload pressure does not require starting now."
     return WorkPriorityBreakdown(
         workload_pressure_score=pressure_score,
         due_proximity_score=due_score,
@@ -266,4 +291,6 @@ def score_work_priority(
         ))),
         assumptions=tuple(dict.fromkeys(assumptions)),
         reasons=tuple(reasons),
+        state=state,
+        state_reason=state_reason,
     )

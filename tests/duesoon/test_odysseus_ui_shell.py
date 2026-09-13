@@ -70,9 +70,9 @@ def test_home_keeps_approved_two_column_briefing_and_embedded_assistant() -> Non
         "cal-quickadd-input",
     ):
         assert inherited_class in source
-    assert 'assignmentList("Urgent", data.urgent)' in source
+    assert 'assignmentList("Urgent", data.urgent, "urgency", urgentEmpty)' in source
     assert 'assignmentList("Work priority", data.upcoming, "priority")' in source
-    assert "item.work_priority.band" in source
+    assert "item.work_priority.display_label" in source
     assert 'assignmentList("Missing or overdue"' in source
     assert 'assignmentList("Recently completed"' in source
     assert 'node("button", "Ask"' in source
@@ -82,6 +82,9 @@ def test_home_keeps_approved_two_column_briefing_and_embedded_assistant() -> Non
     assert "type = \"text\"" in source
     assert "/planning`" in source
     assert "About how many minutes" not in source
+    assert "Needs deadline evidence" in source
+    assert "duesoon-calendar-complete" in source
+    assert "item.work_priority.state_reason" in source
 
 
 def test_learning_feedback_grid_can_shrink_without_workspace_overflow() -> None:
@@ -198,6 +201,8 @@ def test_assistant_shows_safe_decision_trace_without_hidden_reasoning() -> None:
     assert "Missing connections" in source
     assert "Policy versions" in source
     assert "chain-of-thought" not in source.casefold()
+    assert "assistantCard(ask,status)" in source
+    assert "composer below" not in source
 
 
 def test_frontend_runtime_remains_bounded_and_browser_secret_free() -> None:

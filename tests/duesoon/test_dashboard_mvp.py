@@ -301,3 +301,55 @@ def test_briefing_exposes_earliest_operational_date_for_persisted_conflict(
             later,
         }
         assert "private_message" not in response.text
+
+
+def test_briefing_counts_undated_work_and_sorts_real_completion_times(tmp_path: Path) -> None:
+    client, engine = build(tmp_path)
+    now = datetime.now(UTC)
+    with client:
+        with session_factory(engine)() as session:
+            course = Course(canvas_course_id="42", name="Course")
+            session.add(course)
+            for index in range(16):
+                due = now + timedelta(days=index + 1) if index < 12 else None
+                if index == 0:
+                    due = now - timedelta(hours=1)
+                assignment = Assignment(
+                    canvas_assignment_id=str(index), course=course, canonical_title=f"Work {index}",
+                    canvas_due_at=due, published=True, first_seen_at=now, last_seen_at=now,
+                )
+                session.add(assignment)
+                if index >= 14:
+                    session.add(Submission(
+                        assignment=assignment, normalized_status="submitted",
+                        submitted_at=now - timedelta(hours=1 if index == 14 else 8),
+                        observed_at=now, raw_payload={},
+                    ))
+            session.commit()
+        login(client)
+        value = client.get("/api/v1/dashboard/briefing").json()
+        assert value["counts"]["active"] == 14
+        assert value["counts"]["dated_active"] == 12
+        assert value["counts"]["undated_active"] == 2
+        assert value["counts"]["completed"] == 2
+        assert len(value["upcoming"]) == 10
+        assert len(value["needs_information"]) == 2
+        assert value["needs_information"][0]["work_priority"]["state"] == "NEEDS_DEADLINE"
+        assert value["completed_recently"][0]["title"] == "Work 14"
+        assert all(datetime.fromisoformat(item["due_at"]) >= now for item in value["next_due"])
+        assert value["assistant_status"]["availability"] == "disabled"
+
+
+def test_google_sync_does_not_make_stale_canvas_data_look_fresh(tmp_path: Path) -> None:
+    client, engine = build(tmp_path)
+    now = datetime.now(UTC)
+    with client:
+        with session_factory(engine)() as session:
+            session.add_all([
+                SyncRun(source_system="canvas", status="completed", started_at=now - timedelta(hours=2),
+                        finished_at=now - timedelta(hours=2)),
+                SyncRun(source_system="google", status="completed", started_at=now, finished_at=now),
+            ])
+            session.commit()
+        login(client)
+        assert client.get("/api/v1/dashboard/briefing").json()["freshness"]["canvas_status"] == "stale"

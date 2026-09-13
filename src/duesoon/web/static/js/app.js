@@ -50,7 +50,7 @@ async function show(view,question=""){
     if(view==="home"){
       const briefing=await get("/api/v1/dashboard/briefing");
       renderHome(root,briefing,value=>show("assistant",value));
-    }else if(view==="assistant") renderAssistant(root,question);
+    }else if(view==="assistant") await renderAssistant(root,question,await get("/api/v1/dashboard/model-settings"));
     else if(view==="calendar") await renderCalendar(root);
     else if(view==="email") await renderEmail(root);
     else if(view==="notifications") await renderNotifications(root);

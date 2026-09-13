@@ -54,6 +54,10 @@ class ModelSettingsService:
         value = self.effective()
         return {
             "enabled": value.enabled,
+            "availability": (
+                "disabled" if not value.enabled else
+                "unconfigured" if not value.configured else "configured_unverified"
+            ),
             "configured": value.configured,
             "api_key_configured": value.api_key is not None,
             "base_url": value.base_url,
@@ -135,6 +139,8 @@ class AssistantService:
         settings = self._model_settings.effective()
         result = dict(baseline)
         result["calls_used"] = 0
+        if baseline["intent"] == "unsupported" and not (settings.enabled and settings.configured):
+            result["fallback_reason"] = "model_disabled" if not settings.enabled else "provider_unconfigured"
         selected_evidence_ids: list[str] = []
         if baseline["intent"] != "unsupported":
             pass

@@ -96,9 +96,11 @@ jobs:
       - name: node --check
         run: |
           shopt -s globstar nullglob
-          for f in static/app.js static/js/**/*.js; do
+          for f in static/app.js static/js/**/*.js src/duesoon/web/static/js/**/*.js; do
             node --check "$f"
           done
+      - name: DueSoon view runtime
+        run: node tests/duesoon/frontend/home_runtime.mjs
 
   python-tests:
     name: Python tests (pytest)

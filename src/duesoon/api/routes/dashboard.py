@@ -93,7 +93,10 @@ class PlanningUpdateRequest(BaseModel):
 
 @router.get("/briefing")
 def briefing(request: Request):
-    return request.app.state.briefing.snapshot()
+    value = request.app.state.briefing.snapshot()
+    model = request.app.state.model_settings.status()
+    value["assistant_status"] = {"availability": model["availability"]}
+    return value
 
 
 @router.get("/diagnostics")
@@ -445,7 +448,7 @@ def settings(request: Request):
             },
             "dry_run": value.dry_run,
             "features": {
-                "model_assistant": "enabled" if model["enabled"] else (
+                "model_assistant": "configured" if model["enabled"] and model["configured"] else (
                     "configured" if model["configured"] else "disabled"
                 ),
                 "gmail": "connected" if google is not None and google.config.gmail_enabled else "disabled",

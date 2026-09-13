@@ -145,7 +145,7 @@ class AssistantRetrievalService:
 
     @staticmethod
     def _assignment_facts(tokens, snapshot, facts, catalog, consulted) -> None:
-        for group in ("urgent", "upcoming", "overdue", "missing", "completed_recently"):
+        for group in ("urgent", "upcoming", "overdue", "missing", "needs_information", "completed_recently"):
             for item in snapshot.get(group, []):
                 text = f"{item.get('title', '')} {item.get('course_name', '')}"
                 if not _relevant(tokens, text) and not tokens & ACADEMIC_WORDS:

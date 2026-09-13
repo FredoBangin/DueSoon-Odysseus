@@ -73,6 +73,7 @@ def test_due_next_and_work_next_use_separate_orderings() -> None:
         "title": "Capstone Project",
         "course_name": "Course",
         "external_url": None,
+        "work_priority": {"state": "NEXT", "state_reason": "Known workload pressure."},
     }
     quiz = {
         "id": 2,
@@ -216,3 +217,29 @@ def test_general_question_uses_model_without_inventing_academic_evidence(
     assert value["decision_trace"]["sources_consulted"] == []
     assert value["decision_trace"]["evidence_ids"] == []
     engine.dispose()
+
+
+def test_embedded_deadline_word_does_not_hijack_open_question() -> None:
+    snapshot = {"missing": [], "overdue": [], "urgent": [], "upcoming": [],
+                "next_due": [], "freshness": {"canvas_status": "fresh"}}
+    value = DeterministicAssistant().answer(
+        "Why did the professor change the due date for Lab 4?", snapshot
+    )
+    assert value["intent"] == "unsupported"
+
+
+def test_completion_and_status_use_full_counts_not_truncated_or_empty_lists() -> None:
+    snapshot = {
+        "missing": [], "overdue": [], "urgent": [], "upcoming": [], "next_due": [],
+        "needs_information": [], "freshness": {"canvas_status": "fresh"},
+        "counts": {"active": 178, "completed": 16, "urgent": 0, "undated_active": 158},
+    }
+    value = DeterministicAssistant().answer("Did I finish everything?", snapshot)
+    assert "Not everything" in value["answer"]
+    assert "178" in value["answer"] and "158" in value["answer"]
+    status = DeterministicAssistant().answer("Any updates?", snapshot)
+    assert "178 active" in status["answer"] and "16 completed" in status["answer"]
+    work = DeterministicAssistant().answer("What should I work on next?", snapshot)
+    assert "cannot rank" in work["answer"]
+    snapshot["freshness"]["canvas_status"] = "stale"
+    assert DeterministicAssistant().answer("Any updates?", snapshot)["confidence"] == "likely"
