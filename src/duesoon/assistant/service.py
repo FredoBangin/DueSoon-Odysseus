@@ -17,7 +17,9 @@ from .config import EffectiveModelSettings, ModelAssistantConfig, validate_provi
 from .provider import (
     InputBudgetExceeded,
     InvalidProviderResponse,
-    OpenAICompatibleProvider,
+    ModelProvider,
+    HealthReportingProvider,
+    ProviderCooldown,
     ProviderRejected,
     ProviderUnavailable,
 )
@@ -28,10 +30,12 @@ class ModelSettingsService:
     """Merges persisted non-secret settings with environment-only API key."""
 
     def __init__(
-        self, config: ModelAssistantConfig, sessions: sessionmaker[Session]
+        self, config: ModelAssistantConfig, sessions: sessionmaker[Session],
+        provider: ModelProvider | None = None,
     ) -> None:
         self._config = config
         self._sessions = sessions
+        self._provider = provider
 
     def effective(self) -> EffectiveModelSettings:
         with self._sessions() as session:
@@ -67,6 +71,7 @@ class ModelSettingsService:
             "max_input_tokens": value.max_input_tokens,
             "max_output_tokens": value.max_output_tokens,
             "call_budget": value.call_budget,
+            "provider_health": self._provider.health(value) if isinstance(self._provider, HealthReportingProvider) else {"state": "unverified", "reason": None, "retry_after_seconds": 0},
         }
 
     def update(self, values: dict[str, Any]) -> dict[str, Any]:
@@ -120,7 +125,7 @@ class AssistantService:
         self,
         sessions: sessionmaker[Session],
         model_settings: ModelSettingsService,
-        provider: OpenAICompatibleProvider,
+        provider: ModelProvider,
         *,
         deterministic: DeterministicAssistant | None = None,
         learning: Any | None = None,
@@ -180,6 +185,8 @@ class AssistantService:
                     model=provider_answer.model,
                     calls_used=provider_answer.calls_used,
                 )
+            except ProviderCooldown:
+                result["fallback_reason"] = "provider_cooldown"
             except ProviderUnavailable:
                 result["fallback_reason"] = "provider_unavailable"
             except ProviderRejected:

@@ -5,6 +5,16 @@ const muted="admin-toggle-sub";
 const card="admin-card";
 const action="theme-io-btn";
 
+export function providerHealthText(model){
+  const health=model.provider_health||{state:"unverified"};
+  if(health.state==="disabled") return "AI provider disabled. Exact school checks and reminders remain active.";
+  if(health.state==="unconfigured") return "AI provider unavailable: server credentials or model configuration are missing.";
+  if(health.reason==="request_in_progress") return "AI provider request in progress. Health and remaining quota are not yet verified.";
+  if(health.state==="cooldown") return `AI provider paused after ${String(health.reason||"a provider failure").replaceAll("_"," ")}. Retry allowed in about ${Math.ceil((health.retry_after_seconds||0)/60)} minute(s).`;
+  if(health.state==="healthy") return "Last structured provider request succeeded. This does not prove remaining quota or every academic conclusion.";
+  return "AI provider has not been verified since configuration or restart. Configuration alone does not prove available quota.";
+}
+
 export async function renderEmail(root){
   const value=await get("/api/v1/dashboard/gmail?limit=25"); root.replaceChildren();
   const intro=node("article","",card); intro.append(node("h2","School email"),node("p","Read-only Gmail. DueSoon cannot send, delete, archive, or modify messages.",muted)); root.append(intro);
@@ -186,8 +196,9 @@ export async function renderSettings(root){
 
   const save=node("button","Save model settings","confirm-btn confirm-btn-primary");
   const result=node("p","",muted);
-  provider.append(enabledRow,primaryLabel,primary,fallbacksLabel,fallbacks,save,result);
-  provider.onsubmit=async event=>{event.preventDefault();save.disabled=true;try{await patch("/api/v1/dashboard/model-settings",{enabled:enabled.checked,primary_model:primary.value.trim(),fallback_models:fallbacks.value.split(",").map(item=>item.trim()).filter(Boolean)});result.textContent="Saved. Server-held API key was not exposed.";}catch(error){result.textContent=error.message;}finally{save.disabled=false;}};
+  const health=node("p",providerHealthText(model),muted);
+  provider.append(health,enabledRow,primaryLabel,primary,fallbacksLabel,fallbacks,save,result);
+  provider.onsubmit=async event=>{event.preventDefault();save.disabled=true;try{const updated=await patch("/api/v1/dashboard/model-settings",{enabled:enabled.checked,primary_model:primary.value.trim(),fallback_models:fallbacks.value.split(",").map(item=>item.trim()).filter(Boolean)});health.textContent=providerHealthText(updated);result.textContent="Saved. Server-held API key was not exposed.";}catch(error){result.textContent=error.message;}finally{save.disabled=false;}};
   assistantPanel.append(provider);
 
   const appearancePanel=node("section","","hidden");

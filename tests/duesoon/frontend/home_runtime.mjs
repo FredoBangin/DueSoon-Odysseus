@@ -50,6 +50,10 @@ globalThis.fetch = async (path, options) => {
 
 const {renderHome} = await import("../../../src/duesoon/web/static/js/views/home.js");
 const {renderAssistant} = await import("../../../src/duesoon/web/static/js/views/assistant.js");
+const {providerHealthText} = await import("../../../src/duesoon/web/static/js/views/foundations.js");
+assert(providerHealthText({provider_health:{state:"unconfigured"}}).includes("credentials"));
+assert(providerHealthText({provider_health:{state:"healthy"}}).includes("does not prove remaining quota"));
+assert(providerHealthText({provider_health:{state:"cooldown",reason:"quota_exhausted",retry_after_seconds:120}}).includes("2 minute(s)"));
 const root = new Element("section");
 const assignment = {
   id: 1, title: "Lab", course_name: "Course", course_color: "blue",

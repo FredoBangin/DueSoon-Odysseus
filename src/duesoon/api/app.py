@@ -94,11 +94,12 @@ def create_app(
     runtime_settings = settings or get_settings()
     runtime_engine = engine or create_engine_from_settings(runtime_settings)
     runtime_sessions = session_factory(runtime_engine)
+    runtime_model_provider = model_provider or OpenAICompatibleProvider()
     runtime_model_settings = ModelSettingsService(
         ModelAssistantConfig(environment=runtime_settings.environment),
         runtime_sessions,
+        runtime_model_provider,
     )
-    runtime_model_provider = model_provider or OpenAICompatibleProvider()
     runtime_claim_extractor = claim_extractor or StructuredClaimExtractor(
         runtime_model_settings,
         runtime_model_provider,

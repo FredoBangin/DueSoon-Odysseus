@@ -26,7 +26,7 @@ This release corrects dashboard and assistant projections without changing urgen
 
 The freshly inspected Azure checkout was `74fd4ca`. DueSoon and ntfy were healthy, one live scheduler was enabled, and the latest Canvas sync completed. Successful daily notification delivery remained present in persisted history. No notification was sent during this inspection.
 
-The model was disabled and no model API key was present in the running configuration. Module-linked Canvas page capture existed, but structured claims remained absent. Calendar busy blocks were absent at the inspection point. These findings are limitations, not proof that academic intelligence is fully operational.
+No model API key was present in the running configuration. The authenticated projection reports the effective provider as unconfigured; persisted non-secret settings can override the environment enable flag, so an environment-only disabled flag must not be described as the complete effective state. Module-linked Canvas page capture existed, but structured claims remained absent. Calendar busy blocks were absent at the inspection point. These findings are limitations, not proof that academic intelligence is fully operational.
 
 ## Remaining gates
 
@@ -35,4 +35,22 @@ The model was disabled and no model API key was present in the running configura
 3. Verify calendar busy-block coverage against a real work schedule and retain honest empty/disconnected states.
 4. Complete authenticated browser visual acceptance and the remaining master-plan acceptance gates.
 
-Production backup, deployment commit, and live verification must be recorded after deployment; this document does not claim a deployment that has not happened.
+## Completed deployment and live verification
+
+- Deployed application commit: `71cc454` on 2026-09-13. Only the DueSoon container was recreated; ntfy and Caddy remained running.
+- Pre-release SQLite backup: `pre-71cc454-20260913173228.db`, 150,487,040 bytes, integrity check `ok`, owner-only permissions.
+- Application image manifest: `sha256:5d5c8c2b65168a9987a25687fec1ce1cfb96ca87c122b2267bc628d2c14dde20`.
+- DueSoon and ntfy containers reported healthy. Web login and authenticated briefing returned HTTP 200.
+- Fresh Canvas sync completed at 2026-09-13 17:33:09 UTC. Scheduler watermark lag was 100 seconds, or 0.33 configured intervals, at the final check.
+- The live briefing counted 194 published assignments: 174 active, 20 completed, 20 dated active, and 154 undated active. Zero urgent items was accompanied by explicit missing-evidence information.
+- There were zero admitted deadline-evidence assignments and zero structured claims. This release does not claim to have solved evidence extraction.
+- Persisted delivery history remained 26 sent and 1 failed. Anonymous ntfy access returned HTTP 403. No controlled notification was sent.
+- Served Home JavaScript contained the new missing-deadline projection. Its SHA-256 was `ee62185bfbbdea008d9334cc3575485754a6df50efb1069285432d622b0a7767`.
+- The live login page was visually inspected: approved split-card composition and particle background were present. Authenticated dashboard visual acceptance still requires an active browser login; API and runtime-fixture checks are not claimed as visual proof.
+- All eight GitHub workflow runs for `71cc454` completed successfully, including CI, Docker publish, dependency review, CodeQL, secret scan, workflow security, and both container scan workflows.
+
+## Provider safeguard successor
+
+The successor adds the shared provider protocol, failure cooldown, sanitized Settings health, quota-exhaustion suppression, bounded Retry-After handling, and duplicate fallback removal described in `docs/architecture/provider-failure-policy.md`. Full DueSoon tests passed again: 253 passed in 89.18 seconds. The frontend runtime fixture, JavaScript syntax, compile, and diff checks passed. No model request or notification was sent during these gates.
+
+Pre-successor backup: `pre-provider-guard-20260913174356.db`, 150,589,440 bytes, integrity `ok`, owner-only permissions. The successor must still be verified on Azure before it is described as deployed.

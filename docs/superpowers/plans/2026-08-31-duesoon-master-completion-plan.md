@@ -463,6 +463,8 @@ Conversation credit limits may shorten progress reports but never justify skippi
 
 Dashboard truthfulness corrections are implemented and covered by 240 passing DueSoon tests plus a dependency-free frontend runtime fixture. See `docs/deployment/2026-09-13-dashboard-truthfulness.md` for scope, production baseline, and remaining gates. This is not completion of the full plan: live model availability and source-to-claim materialization remain blocking academic-intelligence prerequisites. Scoring weights and reminder behavior were intentionally preserved.
 
+The existing provider is now behind a shared bounded protocol with sanitized health, concurrent workflow failure sharing, bounded Retry-After handling, duplicate fallback removal, and explicit quota-exhaustion suppression. Settings explain actual provider health without claiming remaining quota. See `docs/architecture/provider-failure-policy.md`. Phase 3 remains partial: no new live provider, durable quota ledger, or provider evaluation has been enabled by this checkpoint.
+
 DueSoon is complete for the current single-owner release only when:
 
 - production runs the documented release and shows its version;
