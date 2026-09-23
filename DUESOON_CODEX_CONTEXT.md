@@ -942,11 +942,20 @@ Every terminal status must include a reason and timestamps.
 
 DueSoon sends at most one configurable daily academic briefing after the configured local hour.
 This briefing supplements rather than replaces standard or adaptive checkpoint reminders. It lists
-a bounded number of active assignments in deterministic work-priority order. Every included Canvas
-assignment must receive an immediate submission recheck before the briefing is sent; submitted or
-graded work is removed. The delivery uses a database-backed local-date deduplication key such as
-`daily-digest:2026-08-29`, obeys dry-run behavior, and records a `daily_digest` notification kind.
-No briefing is sent when no eligible active work remains.
+a bounded number of active assignments in chronological `operational_due_at` order, grouped under
+Due Today, Due This Week (through local Sunday), and Due Later. Overdue work appears in the
+immediate Due Today group but is explicitly marked overdue with its real past date. Each line shows
+course, assignment, and exact local weekday/month/day/time/timezone; the year is shown when it
+differs from the current local year. Deadlines within 48 hours are flagged. This display policy is
+separate from the work-priority algorithm used to recommend what to start next.
+
+Never derive a calendar date from a bare weekday in an old delivery. Historical briefings without
+persisted full dates must say `Date unknown — check Canvas`; they must not be rewritten to imply
+today's effective deadline was known when the notification originally went out. Every included
+Canvas assignment must receive an immediate submission recheck before the briefing is sent;
+submitted or graded work is removed. The delivery uses a database-backed local-date deduplication
+key such as `daily-digest:2026-08-29`, obeys dry-run behavior, and records a `daily_digest`
+notification kind. No briefing is sent when no eligible active work remains.
 
 ---
 

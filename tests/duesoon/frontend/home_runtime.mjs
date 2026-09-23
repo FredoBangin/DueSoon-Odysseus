@@ -95,19 +95,21 @@ const {renderNotificationHistory} = await import("../../../src/duesoon/web/stati
 const notification = {
   kind: "daily_digest", title: "DueSoon daily briefing", status: "sent", provider: "ntfy",
   attempted_at: "2026-09-23T12:04:00Z", completed_at: "2026-09-23T12:05:00Z",
-  body: "1. Sample lab\nSample Course\nDue Sun, Sep 27, 2026 at 11:59 PM EDT\n\n2. <img src=x onerror=alert(1)>\nAnother Course\nDue Mon, Sep 28, 2026 at 11:59 PM EDT",
+  body: "Due This Week\nSample Course — Sample lab — Sun, Sep 27 at 11:59 PM EDT\n\nDue Later\nAnother Course — <img src=x onerror=alert(1)> — Mon, Sep 28 at 11:59 PM EDT",
 };
 renderNotificationHistory(root, {timezone:"America/New_York", items:[notification]});
 assert.equal(root.querySelectorAll(".duesoon-notification-entry").length, 2);
+assert.deepEqual(root.querySelectorAll("h3").map(item => item.textContent), ["Due This Week", "Due Later"]);
 assert(root.querySelectorAll("p").some(item => item.textContent.includes("Sep 23, 2026") && item.textContent.includes("8:05 AM EDT")));
-assert(root.querySelectorAll("strong").some(item => item.textContent === "<img src=x onerror=alert(1)>"));
+assert(root.querySelectorAll(".duesoon-notification-entry").some(item => item.textContent.includes("<img src=x onerror=alert(1)>")));
 assert.equal(root.querySelectorAll("img").length, 0, "Source titles must remain escaped text");
 const oldBody = "TEST101-2026-99 | Sample Course: Old lab · due Mon 11:59 PM\nAnother Course: Second lab · due Sun 11:59 PM";
 renderNotificationHistory(root, {timezone:"America/New_York", items:[{...notification, body:oldBody}]});
 assert.equal(root.querySelectorAll(".duesoon-notification-entry").length, 2);
-assert.equal(root.querySelectorAll("strong")[0].textContent, "Old lab");
-assert(root.querySelectorAll("p").some(item => item.textContent.includes("did not record full due dates")));
-renderNotificationHistory(root, {timezone:"America/New_York", items:[{...notification, body:notification.body.split("\n\n")[0]}]});
+assert.equal(root.querySelectorAll(".duesoon-notification-entry")[0].children[0].textContent, "Sample Course — Old lab — Date unknown — check Canvas");
+assert.equal(root.querySelectorAll(".duesoon-notification-entry")[1].children[0].textContent, "Another Course — Second lab — Date unknown — check Canvas");
+assert.equal(root.querySelectorAll(".duesoon-notification-entry").some(item => item.textContent.includes("due Mon")), false);
+renderNotificationHistory(root, {timezone:"America/New_York", items:[{...notification, body:"1. Sample lab\nSample Course\nDue Sun, Sep 27, 2026 at 11:59 PM EDT"}]});
 assert.equal(root.querySelectorAll(".duesoon-notification-entry").length, 1, "A single new-format assignment must stay grouped");
 renderNotificationHistory(root, {timezone:"America/New_York", items:[{...notification, kind:"deadline_checkpoint", body:"Sample lab\nDue in 1h"}]});
 assert(root.querySelectorAll("p").some(item => item.textContent === "Sample lab\nDue in 1h"));

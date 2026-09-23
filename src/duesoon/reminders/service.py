@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime, tzinfo
+from datetime import UTC, datetime, timedelta
 from typing import Callable
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -26,7 +26,6 @@ from src.duesoon.persistence.models import (
     ReminderEvent,
     SchedulerState,
 )
-from src.duesoon.planning import PlanningService
 from src.duesoon.reminders.checkpoints import adaptive_interval_key, crossed_checkpoint
 
 
@@ -50,7 +49,6 @@ class ReminderService:
         notifications: NotificationService,
         *,
         settings: DueSoonSettings | None = None,
-        planning: PlanningService | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         assignment_projector: Callable[[Assignment], EffectiveAssignment] = (
             project_canvas_assignment
@@ -60,7 +58,6 @@ class ReminderService:
         self._canvas_sync = canvas_sync
         self._notifications = notifications
         self._settings = settings
-        self._planning = planning
         self._clock = clock
         self._assignment_projector = assignment_projector
 
@@ -218,20 +215,9 @@ class ReminderService:
         ]
         if not eligible:
             return None
-        if self._planning is not None:
-            projected = tuple(effective for _, effective in eligible)
-            priorities = self._planning.priorities(projected, now)
-            eligible.sort(
-                key=lambda value: (
-                    -priorities[value[0].id].total,
-                    _as_utc(value[1].operational_due_at),
-                    value[0].id,
-                )
-            )
-        else:
-            eligible.sort(
-                key=lambda value: (_as_utc(value[1].operational_due_at), value[0].id)
-            )
+        eligible.sort(
+            key=lambda value: (_as_utc(value[1].operational_due_at), value[0].id)
+        )
         eligible = eligible[: settings.daily_digest_max_items]
 
         active: list[tuple[Assignment, EffectiveAssignment]] = []
@@ -245,7 +231,7 @@ class ReminderService:
         result = self._notifications.send_reminder(
             idempotency_key=dedup_key,
             title=f"DueSoon daily briefing · {local_now.strftime('%b')} {local_now.day}, {local_now.year}",
-            message=_daily_digest_body(active, local_now.tzinfo),
+            message=_daily_digest_body(active, local_now),
             priority=3,
             notification_kind="daily_digest",
         )
@@ -403,29 +389,73 @@ def _display_text(value: str, limit: int) -> str:
 
 
 def _daily_digest_body(
-    assignments: list[tuple[Assignment, EffectiveAssignment]], timezone: tzinfo,
+    assignments: list[tuple[Assignment, EffectiveAssignment]], local_now: datetime,
 ) -> str:
-    blocks: list[str] = []
-    for index, (assignment, effective) in enumerate(assignments, start=1):
-        due = _as_utc(effective.operational_due_at).astimezone(timezone)
-        # Canvas section/term IDs can obscure the human-readable course name.
+    """Render exact operational deadlines in local chronological groups."""
+    if local_now.tzinfo is None:
+        raise ValueError("daily briefing requires a timezone-aware local clock")
+
+    headings = ("Due Today", "Due This Week", "Due Later")
+    week_end = local_now.date() + timedelta(days=6 - local_now.weekday())
+    titles = {
+        (getattr(assignment, "course_id", assignment.course.name),
+         " ".join(assignment.canonical_title.split()).casefold()):
+        assignment.canonical_title
+        for assignment, _ in assignments
+    }
+    rows: list[tuple[str, str]] = []
+    ordered = sorted(assignments, key=lambda value: _as_utc(value[1].operational_due_at))
+    for assignment, effective in ordered:
+        deadline = _as_utc(effective.operational_due_at)
+        due = deadline.astimezone(local_now.tzinfo)
         course = assignment.course.name.partition("|")[2].strip() or assignment.course.name
-        date = f"{due.strftime('%a, %b')} {due.day}, {due.year}"
+        title = " ".join(assignment.canonical_title.split())
+        relation = ""
+        for prefix in ("review for ", "review "):
+            if title.casefold().startswith(prefix):
+                original = titles.get((getattr(assignment, "course_id", assignment.course.name),
+                                       title[len(prefix):].casefold()))
+                if original is not None:
+                    relation = f" (review for {_display_text(original, 45)})"
+                break
+        date = f"{due.strftime('%a, %b')} {due.day}"
+        if due.year != local_now.year:
+            date += f", {due.year}"
         clock = due.strftime("%I:%M %p %Z").lstrip("0")
-        block = (
-            f"{index}. {_display_text(assignment.canonical_title, 100)}\n"
-            f"{_display_text(course, 60)}\n"
-            f"Due {date} at {clock}"
+        remaining = deadline - _as_utc(local_now)
+        flag = "⚠️ OVERDUE " if remaining < timedelta() else "⚠️ " if remaining <= timedelta(hours=48) else ""
+        line = (
+            f"{flag}{_display_text(course, 45)} — {_display_text(title, 85)}"
+            f"{relation} — {date} at {clock}"
         )
-        # Reserve footer space; never truncate the last item's deadline mid-date.
-        remaining = len(assignments) - index
-        footer = f"\n\n+ {remaining} more in dashboard." if remaining else ""
-        candidate = "\n\n".join([*blocks, block])
-        if len(candidate + footer) > 1000:
-            omitted = len(assignments) - len(blocks)
-            return "\n\n".join(blocks) + f"\n\n+ {omitted} more in dashboard."
-        blocks.append(block)
-    return "\n\n".join(blocks)
+        group = (
+            "Due Today" if due.date() <= local_now.date()
+            else "Due This Week" if due.date() <= week_end
+            else "Due Later"
+        )
+        rows.append((group, line))
+
+    def render(selected: list[tuple[str, str]]) -> str:
+        return "\n\n".join(
+            "\n".join([heading, *(line for group, line in selected if group == heading)])
+            for heading in headings
+            if any(group == heading for group, _ in selected)
+        )
+
+    included: list[tuple[str, str]] = []
+    for row in rows:
+        if len(render([*included, row])) > 1000:
+            break
+        included.append(row)
+    omitted = len(rows) - len(included)
+    if omitted:
+        footer = f"\n\n+ {omitted} more in dashboard."
+        while included and len(render(included) + footer) > 1000:
+            included.pop()
+            omitted += 1
+            footer = f"\n\n+ {omitted} more in dashboard."
+        return render(included) + footer
+    return render(included)
 
 
 def _dedup_key(

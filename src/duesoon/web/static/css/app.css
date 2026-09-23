@@ -49,6 +49,20 @@
   margin: 0;
 }
 
+.duesoon-notification-group {
+  margin-top: 12px;
+}
+
+.duesoon-notification-group h3 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.duesoon-notification-group .duesoon-notification-entry {
+  display: block;
+  padding: 7px 0;
+}
+
 .duesoon-notification h2 {
   overflow-wrap: anywhere;
 }

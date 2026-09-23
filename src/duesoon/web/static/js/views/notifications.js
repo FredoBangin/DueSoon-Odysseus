@@ -19,10 +19,25 @@ function notificationBody(item) {
     body.append(node("p", text));
     return body;
   }
-  // Old deliveries have one assignment per line. Do not guess their missing dates
-  // or rewrite the immutable delivery body while making their display readable.
+  const headings = new Set(["Due Today", "Due This Week", "Due Later"]);
+  if (text.split("\n").some(line => headings.has(line.trim()))) {
+    let group = null;
+    for (const line of text.split("\n").map(value => value.trim()).filter(Boolean)) {
+      if (headings.has(line)) {
+        group = node("section", "", "duesoon-notification-group");
+        group.append(node("h3", line));
+        body.append(group);
+      } else if (/^\+ \d+ more in dashboard\.$/u.test(line)) {
+        body.append(node("p", line, "admin-toggle-sub"));
+      } else if (group) {
+        group.append(node("div", line, "duesoon-notification-entry"));
+      }
+    }
+    return body;
+  }
+  // Historical deliveries lack assignment IDs and calendar dates. Never infer
+  // the missing date from a weekday or from today's changed assignment state.
   const blocks = text.includes("\n\n") ? text.split(/\n\s*\n/) : /^1\. /u.test(text) ? [text] : text.split("\n");
-  let legacyDates = false;
   for (const block of blocks.filter(value => value.trim())) {
     const row = node("div", "", "duesoon-notification-entry");
     const lines = block.split("\n");
@@ -31,14 +46,12 @@ function notificationBody(item) {
     } else {
       const old = block.match(/^(.+?): (.+) · due (.+)$/u);
       if (old) {
-        legacyDates = true;
         const course = old[1].split("|").slice(1).join("|").trim() || old[1];
-        row.append(node("strong", old[2]), node("div", course, "admin-toggle-sub"), node("div", `Due ${old[3]}`));
+        row.append(node("div", `${course} — ${old[2]} — Date unknown — check Canvas`));
       } else row.append(node("p", block));
     }
     body.append(row);
   }
-  if (legacyDates) body.append(node("p", "This older briefing did not record full due dates.", "admin-toggle-sub"));
   return body;
 }
 

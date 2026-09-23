@@ -238,7 +238,9 @@ def test_daily_digest_sends_once_after_local_hour_with_immediate_recheck(
             assert delivery.dedup_key == "daily-digest:2026-08-27"
             assert "Lab 1" in delivery.rendered_body
             assert delivery.rendered_title == "DueSoon daily briefing · Aug 27, 2026"
-            assert delivery.rendered_body == "1. Lab 1\nNetwork Security\nDue Sun, Aug 30, 2026 at 7:59 AM EDT"
+            assert delivery.rendered_body == (
+                "Due This Week\nNetwork Security — Lab 1 — Sun, Aug 30 at 7:59 AM EDT"
+            )
         assert before_hour.sent == 0
         assert first.sent == 1
         assert second.sent == 0
@@ -314,12 +316,67 @@ def test_digest_formats_operational_deadlines_in_local_timezone_across_dst() -> 
     ]
     body = _daily_digest_body(
         [(assignment, SimpleNamespace(operational_due_at=due)) for due in deadlines],
-        ZoneInfo("America/New_York"),
+        datetime(2026, 9, 23, 8, tzinfo=ZoneInfo("America/New_York")),
     )
     assert body.split("\n\n") == [
-        "1. Project one\nSample Course\nDue Sun, Sep 27, 2026 at 11:59 PM EDT",
-        "2. Project one\nSample Course\nDue Sun, Nov 1, 2026 at 11:59 PM EST",
+        "Due This Week\nSample Course — Project one — Sun, Sep 27 at 11:59 PM EDT",
+        "Due Later\nSample Course — Project one — Sun, Nov 1 at 11:59 PM EST",
     ]
+
+
+def test_digest_groups_chronologically_flags_near_work_and_keeps_review_separate() -> None:
+    zone = ZoneInfo("America/New_York")
+    local_now = datetime(2026, 9, 23, 8, tzinfo=zone)
+
+    def item(title: str, due: datetime, course_id: int = 1):
+        return (
+            SimpleNamespace(
+                course_id=course_id,
+                course=SimpleNamespace(name="TEST101-2026-99 | Sample Course"),
+                canonical_title=title,
+            ),
+            SimpleNamespace(operational_due_at=due.astimezone(UTC)),
+        )
+
+    body = _daily_digest_body(
+        [
+            item("Term paper", datetime(2026, 9, 28, 23, 59, tzinfo=zone)),
+            item("Mid Exam", datetime(2026, 9, 27, 23, 59, tzinfo=zone)),
+            item("REVIEW Mid Exam", datetime(2026, 9, 26, 23, 59, tzinfo=zone)),
+            item("Today's lab", datetime(2026, 9, 23, 23, 59, tzinfo=zone)),
+            item("Next year", datetime(2027, 1, 4, 23, 59, tzinfo=zone)),
+        ],
+        local_now,
+    )
+    assert body == (
+        "Due Today\n"
+        "⚠️ Sample Course — Today's lab — Wed, Sep 23 at 11:59 PM EDT\n\n"
+        "Due This Week\n"
+        "Sample Course — REVIEW Mid Exam (review for Mid Exam) — Sat, Sep 26 at 11:59 PM EDT\n"
+        "Sample Course — Mid Exam — Sun, Sep 27 at 11:59 PM EDT\n\n"
+        "Due Later\n"
+        "Sample Course — Term paper — Mon, Sep 28 at 11:59 PM EDT\n"
+        "Sample Course — Next year — Mon, Jan 4, 2027 at 11:59 PM EST"
+    )
+
+
+def test_digest_exact_48_hour_boundary_and_overdue_dates_are_explicit() -> None:
+    zone = ZoneInfo("America/New_York")
+    now = datetime(2026, 9, 23, 8, tzinfo=zone)
+    assignment = SimpleNamespace(
+        course=SimpleNamespace(name="Sample Course"), canonical_title="Lab",
+    )
+    body = _daily_digest_body(
+        [
+            (assignment, SimpleNamespace(operational_due_at=(now + timedelta(hours=48)).astimezone(UTC))),
+            (assignment, SimpleNamespace(operational_due_at=(now - timedelta(days=1)).astimezone(UTC))),
+        ],
+        now,
+    )
+    assert body == (
+        "Due Today\n⚠️ OVERDUE Sample Course — Lab — Tue, Sep 22 at 8:00 AM EDT\n\n"
+        "Due This Week\n⚠️ Sample Course — Lab — Fri, Sep 25 at 8:00 AM EDT"
+    )
 
 
 def test_long_digest_keeps_whole_dates_and_accounts_for_omitted_items() -> None:
@@ -327,13 +384,16 @@ def test_long_digest_keeps_whole_dates_and_accounts_for_omitted_items() -> None:
         course=SimpleNamespace(name="Long course name " * 50), canonical_title="Long title " * 100,
     )
     effective = SimpleNamespace(operational_due_at=datetime(2027, 1, 1, 4, 59, tzinfo=UTC))
-    body = _daily_digest_body([(assignment, effective)] * 10, ZoneInfo("America/New_York"))
+    body = _daily_digest_body(
+        [(assignment, effective)] * 10,
+        datetime(2026, 12, 30, 8, tzinfo=ZoneInfo("America/New_York")),
+    )
     blocks = body.split("\n\n")
     assert len(body) <= 1000
-    assert blocks[-1] == f"+ {10 - len(blocks) + 1} more in dashboard."
-    for block in blocks[:-1]:
-        assert len(block.splitlines()) == 3
-        assert block.endswith("Due Thu, Dec 31, 2026 at 11:59 PM EST")
+    assert blocks[-1].startswith("+ ") and blocks[-1].endswith(" more in dashboard.")
+    assert body.startswith("Due This Week\n")
+    for line in blocks[0].splitlines()[1:]:
+        assert line.endswith("Thu, Dec 31 at 11:59 PM EST")
 
 
 def test_daily_digest_suppresses_when_configured_timezone_is_unavailable(
