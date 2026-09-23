@@ -232,7 +232,7 @@ class BriefingService:
     def notifications(self, limit: int) -> dict[str, object]:
         with self.sessions() as session:
             rows = session.scalars(select(NotificationDelivery).order_by(NotificationDelivery.created_at.desc()).limit(limit)).all()
-            return {"items": [{"id": row.id, "kind": row.notification_kind, "status": row.status,
+            return {"timezone": self.settings.timezone, "items": [{"id": row.id, "kind": row.notification_kind, "status": row.status,
                                "title": row.rendered_title, "body": row.rendered_body,
                                "priority": row.priority, "provider": row.provider,
                                "attempted_at": _utc(row.attempted_at).isoformat(),

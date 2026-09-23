@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, tzinfo
 from typing import Callable
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -242,16 +242,10 @@ class ReminderService:
         if not active:
             return None
 
-        lines = []
-        for assignment, effective in active:
-            due = _as_utc(effective.operational_due_at).astimezone(local_now.tzinfo)
-            lines.append(
-                f"{assignment.course.name}: {assignment.canonical_title} · due {due.strftime('%a %I:%M %p').lstrip('0')}"
-            )
         result = self._notifications.send_reminder(
             idempotency_key=dedup_key,
-            title="DueSoon daily briefing",
-            message="\n".join(lines)[:1000],
+            title=f"DueSoon daily briefing · {local_now.strftime('%b')} {local_now.day}, {local_now.year}",
+            message=_daily_digest_body(active, local_now.tzinfo),
             priority=3,
             notification_kind="daily_digest",
         )
@@ -400,6 +394,38 @@ def _as_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=UTC)
     return value.astimezone(UTC)
+
+
+def _display_text(value: str, limit: int) -> str:
+    """Keep source titles on one bounded line without changing stored evidence."""
+    text = " ".join(value.split())
+    return text if len(text) <= limit else text[:limit - 1].rstrip() + "…"
+
+
+def _daily_digest_body(
+    assignments: list[tuple[Assignment, EffectiveAssignment]], timezone: tzinfo,
+) -> str:
+    blocks: list[str] = []
+    for index, (assignment, effective) in enumerate(assignments, start=1):
+        due = _as_utc(effective.operational_due_at).astimezone(timezone)
+        # Canvas section/term IDs can obscure the human-readable course name.
+        course = assignment.course.name.partition("|")[2].strip() or assignment.course.name
+        date = f"{due.strftime('%a, %b')} {due.day}, {due.year}"
+        clock = due.strftime("%I:%M %p %Z").lstrip("0")
+        block = (
+            f"{index}. {_display_text(assignment.canonical_title, 100)}\n"
+            f"{_display_text(course, 60)}\n"
+            f"Due {date} at {clock}"
+        )
+        # Reserve footer space; never truncate the last item's deadline mid-date.
+        remaining = len(assignments) - index
+        footer = f"\n\n+ {remaining} more in dashboard." if remaining else ""
+        candidate = "\n\n".join([*blocks, block])
+        if len(candidate + footer) > 1000:
+            omitted = len(assignments) - len(blocks)
+            return "\n\n".join(blocks) + f"\n\n+ {omitted} more in dashboard."
+        blocks.append(block)
+    return "\n\n".join(blocks)
 
 
 def _dedup_key(

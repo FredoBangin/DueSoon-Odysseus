@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
+from zoneinfo import ZoneInfo
 
 import pytest
 from sqlalchemy import select
@@ -21,7 +23,7 @@ from src.duesoon.persistence.database import (
     session_factory,
 )
 from src.duesoon.persistence.models import NotificationDelivery, ReminderEvent, SchedulerState
-from src.duesoon.reminders.service import ReminderService
+from src.duesoon.reminders.service import ReminderService, _daily_digest_body
 
 
 @pytest.mark.parametrize(
@@ -235,11 +237,14 @@ def test_daily_digest_sends_once_after_local_hour_with_immediate_recheck(
             assert delivery.status == "sent"
             assert delivery.dedup_key == "daily-digest:2026-08-27"
             assert "Lab 1" in delivery.rendered_body
+            assert delivery.rendered_title == "DueSoon daily briefing · Aug 27, 2026"
+            assert delivery.rendered_body == "1. Lab 1\nNetwork Security\nDue Sun, Aug 30, 2026 at 7:59 AM EDT"
         assert before_hour.sent == 0
         assert first.sent == 1
         assert second.sent == 0
         assert canvas.refresh_calls == 1
         assert len(publisher.calls) == 1
+        assert publisher.calls[0]["message"] == delivery.rendered_body
     finally:
         engine.dispose()
 
@@ -296,6 +301,39 @@ def test_retryable_delivery_rechecks_canvas_again_before_retry(tmp_path: Path) -
         assert len(publisher.calls) == 2
     finally:
         engine.dispose()
+
+
+def test_digest_formats_operational_deadlines_in_local_timezone_across_dst() -> None:
+    assignment = SimpleNamespace(
+        course=SimpleNamespace(name="TEST101-2026-99 | Sample Course"),
+        canonical_title="Project\n  one", due_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    deadlines = [
+        datetime(2026, 9, 28, 3, 59, tzinfo=UTC),
+        datetime(2026, 11, 2, 4, 59, tzinfo=UTC),
+    ]
+    body = _daily_digest_body(
+        [(assignment, SimpleNamespace(operational_due_at=due)) for due in deadlines],
+        ZoneInfo("America/New_York"),
+    )
+    assert body.split("\n\n") == [
+        "1. Project one\nSample Course\nDue Sun, Sep 27, 2026 at 11:59 PM EDT",
+        "2. Project one\nSample Course\nDue Sun, Nov 1, 2026 at 11:59 PM EST",
+    ]
+
+
+def test_long_digest_keeps_whole_dates_and_accounts_for_omitted_items() -> None:
+    assignment = SimpleNamespace(
+        course=SimpleNamespace(name="Long course name " * 50), canonical_title="Long title " * 100,
+    )
+    effective = SimpleNamespace(operational_due_at=datetime(2027, 1, 1, 4, 59, tzinfo=UTC))
+    body = _daily_digest_body([(assignment, effective)] * 10, ZoneInfo("America/New_York"))
+    blocks = body.split("\n\n")
+    assert len(body) <= 1000
+    assert blocks[-1] == f"+ {10 - len(blocks) + 1} more in dashboard."
+    for block in blocks[:-1]:
+        assert len(block.splitlines()) == 3
+        assert block.endswith("Due Thu, Dec 31, 2026 at 11:59 PM EST")
 
 
 def test_daily_digest_suppresses_when_configured_timezone_is_unavailable(

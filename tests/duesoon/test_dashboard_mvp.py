@@ -15,6 +15,7 @@ from src.duesoon.persistence.models import (
     AssignmentSnapshot,
     Claim,
     Course,
+    NotificationDelivery,
     SourceRecord,
     Submission,
     SyncRun,
@@ -94,6 +95,28 @@ def test_password_hash_round_trip() -> None:
     encoded = hash_password("correct-password-123")
     assert verify_password("correct-password-123", encoded)
     assert not verify_password("wrong-password-123", encoded)
+
+
+def test_notification_history_preserves_body_and_exposes_display_timezone(tmp_path: Path) -> None:
+    client, engine = build(tmp_path)
+    original_body = "Sample Course: Lab 1 · due Mon 11:59 PM\nSample Course: Lab 2 · due Sun 11:59 PM"
+    completed = datetime(2026, 9, 23, 12, 5, tzinfo=UTC)
+    with client:
+        with session_factory(engine)() as session:
+            session.add(NotificationDelivery(
+                dedup_key="test-digest", notification_kind="daily_digest", status="sent",
+                rendered_title="DueSoon daily briefing", rendered_body=original_body,
+                priority=3, provider="ntfy", attempted_at=completed - timedelta(seconds=1),
+                completed_at=completed,
+            ))
+            session.commit()
+        assert client.get("/api/v1/dashboard/notifications").status_code == 401
+        login(client)
+        history = client.get("/api/v1/dashboard/notifications").json()
+        assert history["timezone"] == "America/New_York"
+        assert history["items"][0]["body"] == original_body
+        assert history["items"][0]["completed_at"] == completed.isoformat()
+    engine.dispose()
 
 
 def test_login_clears_the_retired_ntfy_web_service_worker(tmp_path: Path) -> None:

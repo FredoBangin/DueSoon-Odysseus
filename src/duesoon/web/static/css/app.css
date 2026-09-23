@@ -31,6 +31,28 @@
   grid-column: 1 / -1;
 }
 
+.duesoon-notification-body {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.duesoon-notification-entry {
+  display: grid;
+  gap: 4px;
+  padding: 14px 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 35%, transparent);
+}
+
+.duesoon-notification-entry p {
+  margin: 0;
+}
+
+.duesoon-notification h2 {
+  overflow-wrap: anywhere;
+}
+
 .duesoon-assignment-list .cal-event-item:last-child {
   margin-bottom: 0;
 }
