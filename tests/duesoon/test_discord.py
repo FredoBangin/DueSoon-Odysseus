@@ -85,3 +85,18 @@ def test_discord_timeout_or_unconfirmed_response_is_not_blindly_retried() -> Non
         assert error.value.ambiguous is True
         assert error.value.retryable is False
         assert error.value.__suppress_context__ or error.value.__context__ is None
+
+
+def test_key_facts_and_reply_links_are_readable_in_actual_payload() -> None:
+    def handler(request):
+        payload = json.loads(request.content)
+        embed = payload["embeds"][0]
+        text = embed["description"]
+        assert "**School overview**" in text
+        assert "**Assignment: Security — Final exam**" in text
+        assert "\n\n**Current verified deadline: Sunday, October 4 at 11:59 PM EDT.**\n\n" in text
+        assert "[Reply in DueSoon](https://due.test/app/assistant?update=1)" in text
+        assert "author" not in embed and payload["allowed_mentions"] == {"parse": []}
+        return httpx.Response(200, json={"id": "readable-message"})
+    publisher = DiscordWebhookPublisher(settings(), client=httpx.Client(transport=httpx.MockTransport(handler)))
+    publisher.publish(title="School update", message="School overview\nRecorded workload.\n\nPlanning review\nAssignment: Security — Final exam\n\nCurrent verified deadline: Sunday, October 4 at 11:59 PM EDT.\n\nReply whenever you can.\n\nReview or reply: https://due.test/app/assistant?update=1")

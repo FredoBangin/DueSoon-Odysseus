@@ -31,6 +31,51 @@ def _date(value: datetime, local_now: datetime) -> str:
     return f"{date} at {local.strftime('%I:%M %p %Z').lstrip('0')}"
 
 
+def briefing_context(
+    assignments: list[Assignment], *, deadline_versions: dict[int, str],
+    completion_versions: dict[int, str], states: dict[str, str],
+    now: datetime, timezone: str, snapshot_at: datetime | None,
+) -> tuple[str, list[tuple[str, list[tuple[int, str]]]]]:
+    """Recorded workload totals plus individually rechecked, version-matched rows."""
+    now = _utc(now)
+    local_now = now.astimezone(ZoneInfo(timezone))
+    projected = [(item, project_canvas_assignment(item)) for item in assignments]
+    unfinished = [(item, value) for item, value in projected
+                  if value.submission_status in {"not_submitted", "missing", "late"}]
+    deadlines = [_utc(value.operational_due_at) for _, value in unfinished if value.operational_due_at]
+    soon = sum(now <= due <= now + timedelta(hours=48) for due in deadlines)
+    overdue = sum(due < now for due in deadlines)
+    unknown = sum(value.operational_due_at is None for _, value in unfinished)
+    conflicts = sum(value.deadline_status == "conflicted" for _, value in unfinished)
+    recorded = _date(snapshot_at, local_now) if snapshot_at else "timestamp unavailable"
+    overview = (f"School overview\n{len(unfinished)} unfinished · {soon} due within 48 hours · {overdue} overdue\n"
+                f"{unknown} dates unknown · {conflicts} deadline conflicts\n"
+                f"Canvas snapshot: {recorded}.\nTotals are recorded; listed deadlines/completions are freshly rechecked.")
+    groups: dict[str, list[tuple[int, str]]] = {
+        "Recently completed": [], "Due Today": [], "Due This Week": [], "Due Later": [],
+    }
+    week_end = local_now.date() + timedelta(days=6-local_now.weekday())
+    for item, value in sorted(projected, key=lambda pair: (
+        _utc(pair[1].operational_due_at) if pair[1].operational_due_at else datetime.max.replace(tzinfo=UTC), pair[0].id,
+    )):
+        state = states.get(str(item.id))
+        if item.id in completion_versions and state in {"submitted", "graded"} and value.submission_status in {"submitted", "graded"}:
+            stamp = (item.submission.submitted_at or item.submission.graded_at) if item.submission else None
+            if stamp and _utc(stamp).isoformat() == completion_versions[item.id]:
+                groups["Recently completed"].append((item.id, f"{_label(item)} — completed; recorded {_date(stamp, local_now)}."))
+        if item.id not in deadline_versions or state not in {"not_submitted", "missing", "late"} or value.submission_status not in {"not_submitted", "missing", "late"}:
+            continue
+        due = _utc(value.operational_due_at) if value.operational_due_at else None
+        if due is None or due.isoformat() != deadline_versions[item.id]:
+            continue
+        day = due.astimezone(local_now.tzinfo).date()
+        heading = "Due Today" if day <= local_now.date() else "Due This Week" if day <= week_end else "Due Later"
+        flag = "Overdue — " if due < now else "Within 48 hours — " if due <= now + timedelta(hours=48) else ""
+        conflict = " (earliest credible date; conflict needs review)" if value.deadline_status == "conflicted" else ""
+        groups[heading].append((item.id, f"{flag}{_label(item)} — due {_date(due, local_now)}{conflict}."))
+    return overview, [(heading, rows) for heading, rows in groups.items() if rows]
+
+
 def school_update(
     assignments: list[Assignment], *, original_message: str,
     completed: list[Assignment], announcements: int,

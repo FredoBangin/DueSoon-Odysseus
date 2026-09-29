@@ -6,11 +6,11 @@ import pytest
 from sqlalchemy import select
 
 from src.duesoon.config.settings import DueSoonSettings
-from src.duesoon.notifications.discord import DiscordPublishError
+from src.duesoon.notifications.discord import DiscordPublishError, _description
 from src.duesoon.notifications.service import NotificationService
 from src.duesoon.notifications.updates import AcademicUpdateService, announcement_excerpt
 from src.duesoon.persistence.database import create_engine_from_settings, create_schema, session_factory
-from src.duesoon.persistence.models import AcademicNote, AcademicUpdateEvent, Assignment, Course, NotificationDelivery, NotificationMirrorContext, ReminderEvent, SourceRecord
+from src.duesoon.persistence.models import AcademicNote, AcademicUpdateEvent, Assignment, Course, NotificationDelivery, NotificationMirrorContext, ReminderEvent, SourceRecord, Submission, SyncRun
 from tests.duesoon.test_discord_mirror import Publisher
 from tests.duesoon.test_dashboard_mvp import attach_deadline_evidence
 
@@ -151,6 +151,10 @@ def test_submission_recheck_cannot_send_completed_unknown_or_failed(env, state, 
     env.service.run_once()
     assert rows(env)[0].status == expected and not env.discord.calls
     assert env.checks == [env.assignment_id]
+    if state == "unknown":
+        with env.sessions() as session:
+            context = session.get(NotificationMirrorContext, rows(env)[0].id)
+            assert context.submission_recheck_statuses[str(env.assignment_id)] == "unknown"
 
 
 def test_retry_is_safe_bounded_and_does_not_resend_ntfy(env):
@@ -200,7 +204,7 @@ def test_urgent_ntfy_bypasses_cadence_with_recheck_and_dedup(env):
     env.now[0] += timedelta(minutes=1)
     change_due(env, env.now[0]+timedelta(hours=24))
     env.service.run_once()
-    assert len(env.discord.calls) == 1 and len(env.primary.calls) == 1 and env.checks == [env.assignment_id]
+    assert len(env.discord.calls) == 1 and len(env.primary.calls) == 1 and env.checks == [env.assignment_id]*2
     assert "Wednesday, September 30 at 8:02 AM EDT" in env.primary.calls[0]["message"]
     env.service.run_once()
     assert len(env.primary.calls) == 1
@@ -312,3 +316,127 @@ def test_real_fact_preview_is_explicit_audited_rechecked_and_never_followed_up(e
     env.now[0] += timedelta(hours=48)
     env.service.run_once()
     assert len(env.discord.calls)==1 and not env.primary.calls
+
+
+def add_work(env, title, due, *, completed_at=None):
+    with env.sessions() as session:
+        item = Assignment(canvas_assignment_id=title, course_id=env.course_id, canonical_title=title,
+            canvas_due_at=due, published=True, first_seen_at=env.now[0], last_seen_at=env.now[0])
+        if completed_at:
+            item.submission = Submission(normalized_status="submitted", submitted_at=completed_at,
+                observed_at=env.now[0], raw_payload={})
+        session.add(item)
+        session.commit()
+        return item.id
+
+
+def test_bundle_combines_overview_exact_deadlines_completion_and_announcement(env):
+    today = add_work(env, "Practice quiz", env.now[0]+timedelta(hours=3))
+    future = add_work(env, "Later project", datetime(2027, 1, 9, 19, tzinfo=UTC))
+    add_work(env, "Undated lab", None)
+    done = add_work(env, "Completed lab", env.now[0], completed_at=env.now[0]-timedelta(hours=3))
+    old = add_work(env, "Old completion", env.now[0], completed_at=env.now[0]-timedelta(days=5))
+    with env.sessions() as session:
+        session.add(SyncRun(status="completed", started_at=env.now[0]-timedelta(minutes=2), finished_at=env.now[0]))
+        session.commit()
+    def recheck(key):
+        env.checks.append(key)
+        return "submitted" if key in {done, old} else "not_submitted"
+    env.service.recheck = recheck
+    env.service.run_once()
+    env.now[0] += timedelta(minutes=1)
+    announcement(env)
+    env.service.run_once()
+    body = env.discord.calls[0]["message"]
+    assert "School overview\n4 unfinished · 1 due within 48 hours · 0 overdue" in body
+    assert "1 dates unknown" in body and "Canvas snapshot: Tuesday, September 29 at 8:00 AM EDT" in body
+    assert "Source excerpt (not AI analysis)" in body and "study guide" in body
+    assert "Recently completed\nSecurity — Completed lab — completed; recorded Tuesday, September 29 at 5:00 AM EDT" in body
+    assert "Due Today\nWithin 48 hours — Security — Practice quiz — due Tuesday, September 29 at 11:00 AM EDT" in body
+    assert "Saturday, January 9, 2027 at 2:00 PM EST" in body and body.index("Practice quiz") < body.index("Final exam") < body.index("Later project")
+    assert "Old completion" not in body and "Undated lab — due" not in body
+    assert set(env.checks) == {env.assignment_id, today, future, done} and not env.primary.calls
+    with env.sessions() as session:
+        context = session.get(NotificationMirrorContext, rows(env)[0].id)
+        assert set(context.assignment_ids) == set(env.checks)
+        assert context.submission_recheck_statuses[str(done)] == "submitted"
+
+
+@pytest.mark.parametrize("state", ["unknown", "submitted", RuntimeError("private details")])
+def test_optional_context_failure_omits_row_without_blocking_announcement(env, state):
+    env.service.run_once()
+    env.now[0] += timedelta(minutes=1)
+    announcement(env)
+    env.states[0] = state
+    env.service.run_once()
+    assert rows(env)[0].status == "sent" and len(env.discord.calls) == 1
+    body = env.discord.calls[0]["message"]
+    assert "School overview" in body and "Professor update" in body and "Final exam" not in body
+    assert "private details" not in body
+
+
+def test_completion_requires_positive_fresh_check_and_recent_real_timestamp(env):
+    add_work(env, "Reopened task", env.now[0], completed_at=env.now[0]-timedelta(hours=1))
+    env.service.run_once()
+    env.now[0] += timedelta(minutes=1)
+    announcement(env)
+    env.service.run_once()
+    assert "Recently completed" not in env.discord.calls[0]["message"]
+    assert "Reopened task" not in env.discord.calls[0]["message"]
+
+
+def test_retry_rebuilds_optional_context_and_never_sends_old_deadline(env):
+    env.service.run_once()
+    env.now[0] += timedelta(minutes=1)
+    announcement(env)
+    env.discord.errors = [DiscordPublishError("rate limited", retryable=True, retry_after=30)]
+    new_due = env.now[0]+timedelta(days=10)
+    def recheck(key):
+        env.checks.append(key)
+        change_due(env, new_due)
+        return "not_submitted"
+    env.service.recheck = recheck
+    env.service.run_once()
+    assert "Final exam" not in env.discord.calls[0]["message"]
+    env.now[0] += timedelta(seconds=30)
+    env.service._attempt(rows(env)[0].id)
+    assert "Friday, October 9 at 8:01 AM EDT" in env.discord.calls[-1]["message"]
+    assert "Tuesday, October 6" not in env.discord.calls[-1]["message"]
+    assert env.checks == [env.assignment_id]*2 and not env.primary.calls
+
+
+def test_embed_budget_preserves_whole_dates_and_pending_overflow(env):
+    for number in range(8):
+        add_work(env, f"Long lab {number} " + "*"*100, env.now[0]+timedelta(days=number+1))
+    env.service.run_once()
+    env.now[0] += timedelta(minutes=1)
+    for number in range(5):
+        announcement(env, str(number), message="Important professor instructions "*20)
+    env.service.run_once()
+    body = env.discord.calls[0]["message"]
+    assert len(_description(body)) <= 3900 and "School overview" in body and "Due This Week" in body
+    assert "at 8:00 AM EDT." in body
+    with env.sessions() as session:
+        pending = list(session.scalars(select(AcademicUpdateEvent).where(AcademicUpdateEvent.status == "pending")))
+        assert pending and all(item.discord_delivery_id is None for item in pending)
+    assert len(env.discord.calls) == 1
+
+
+def test_display_bolds_key_facts_shortens_trusted_links_and_escapes_source_markdown():
+    rendered = _description("Planning review\nAssignment: Security — Lab *one*\n\nCurrent verified deadline: Monday, October 19 at 11:59 PM EDT.\n\nReview or reply: https://due.test/app/assistant?update=144\nSource excerpt (not AI analysis): [fake](https://bad.test) @everyone")
+    assert "**Planning review**" in rendered and "**Assignment: Security — Lab \\*one\\***" in rendered
+    assert "**Current verified deadline: Monday, October 19 at 11:59 PM EDT.**" in rendered
+    assert "[Reply in DueSoon](https://due.test/app/assistant?update=144)" in rendered
+    assert "\\[fake\\]" in rendered
+    assert "[Reply in DueSoon]" not in _description("Review or reply: https://due.test/app/assistant?update=144)[spoof](https://bad.test)")
+
+
+def test_large_single_event_is_not_starved_by_optional_briefing_budget(env):
+    env.service.run_once()
+    env.now[0] += timedelta(minutes=1)
+    announcement(env)
+    original = "Verified event details " + "x"*3780
+    env.service._render = lambda session, events, **kwargs: ("School change", original)
+    env.service.run_once()
+    assert rows(env)[0].status == "sent" and env.discord.calls[0]["message"] == original
+    assert len(_description(original)) <= 3900

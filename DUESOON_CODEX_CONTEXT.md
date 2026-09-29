@@ -970,7 +970,20 @@ fresh Canvas submission check; reuse an already-sent current-version checkpoint
 when it covers that risk. Deterministic code still owns deadlines and delivery.
 
 Updates state what changed, exact dates, source, why it matters, next action, and
-any information needed. Without a verified model, announcement text is a bounded,
+any information needed. Each event-triggered bundle also includes the previous
+school-briefing information: a labeled recorded-workload overview, bounded exact
+deadlines grouped chronologically, and recent completions with actual Canvas
+timestamps. This enrichment does not introduce daily Discord messages or alter
+the 48-hour cadence. Recheck every listed deadline and completion in Canvas;
+omit optional rows with unavailable checks without blocking a valid announcement.
+Required assignment-event checks still fail closed. Rebuild context on retries
+and suppress changed versions. Distinguish recorded workload counts from live
+checks, show the last successful Canvas-sync time (or state it is unavailable),
+and never invent missing dates. Keep complete rows within the embed budget;
+retain queued-event overflow. Bold key names/dates, separate sections, and use
+short dashboard/reply links instead of displaying long URLs. Follow-ups remain
+focused on the unanswered question rather than repeating the full workload.
+Without a verified model, announcement text is a bounded,
 redacted source excerpt explicitly labeled `not AI analysis`; do not invent a
 summary or silently call an unconfigured provider. AI interpretation remains pending
 the owner's API-key setup and provider verification. Reply links open the existing

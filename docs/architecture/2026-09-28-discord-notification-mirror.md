@@ -26,6 +26,24 @@ current policy. ntfy remains the primary private reminder provider.
   Overflow stays pending for the next bundle. Restart does not reset cadence.
 - Include what changed, exact dates, source, why it matters, next action, and any
   question requiring owner context. Never calculate a date from a bare weekday.
+- Combine that information with a school overview, upcoming/overdue deadlines,
+  and recent verified completions. Context enriches a real event-triggered bundle;
+  it does not generate routine Discord digests. Workload totals are explicitly a
+  recorded snapshot with the last successful Canvas-sync time, not a claim that
+  every assignment was live-checked. Deadline groups follow the existing Today,
+  This Week (through local Sunday), and Later rules; past dates retain an overdue
+  label and the actual date. Completion timestamps must be real and within 48 hours.
+- Context selects up to five upcoming deadlines, two recent overdue deadlines,
+  and three recent completions for bounded live checks. Optional rows are omitted
+  if checks fail, status contradicts the claim, or a version changes. Mandatory
+  event checks run last and remain fail-closed. Retries reconstruct current context.
+  No extra model call, provider, scheduler, or notification trigger is introduced.
+- Reserve 1,200 characters for context; include whole rows only within the 3,900
+  rendered-character budget. An unusually large single event may use that space
+  instead; required facts take precedence over optional context. Queued event
+  overflow stays pending. Bold names and
+  exact dates, space sections, and render validated dashboard/reply URLs as short
+  links. Source text remains escaped; automatic mentions remain disabled.
 - Urgent new earlier deadlines or conflicts within 48 hours can use ntfy without
   waiting for Discord. Fresh Canvas submission checks are mandatory. Reuse a
   current-deadline checkpoint sent in the same evaluation rather than double-ping.
@@ -70,7 +88,10 @@ Before each live assignment-related update or retry, recheck submission in Canva
 and validate the current operational projection again. Completed, unpublished,
 inactive, or obsolete facts are suppressed; unknown or failed checks cannot send.
 Announcements alone are informational source updates, not assignment reminders.
-No submission claim is inferred from announcement content.
+No submission claim is inferred from announcement content. Optional deadline and
+completion rows attached to announcements still require fresh submission checks;
+failure omits those rows, not the announcement. Audit includes every check result
+and the assignment IDs/deadline versions actually included in the rendered body.
 
 Each bundle has a unique audit key, rendered body, provider outcome, and a
 NotificationMirrorContext containing exact deadline versions, check observations,

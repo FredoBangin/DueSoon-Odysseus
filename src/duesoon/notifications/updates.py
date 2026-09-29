@@ -18,10 +18,10 @@ from src.duesoon.assignments.effective import project_canvas_assignment
 from src.duesoon.documents.extract import DocumentExtractionError, extract_document
 from src.duesoon.intelligence.service import assignment_load_options
 from src.duesoon.notifications.discord import DiscordPublishError, _description
-from src.duesoon.notifications.briefing import _date, _label, _text
+from src.duesoon.notifications.briefing import _date, _label, _text, briefing_context
 from src.duesoon.persistence.models import (
     AcademicNote, AcademicUpdateEvent, Assignment, Course, NotificationDelivery,
-    NotificationMirrorContext, ReminderEvent, SchedulerState, SourceRecord,
+    NotificationMirrorContext, ReminderEvent, SchedulerState, SourceRecord, SyncRun,
 )
 
 
@@ -215,7 +215,7 @@ class AcademicUpdateService:
     def _render(self, session, events, *, followup=False) -> tuple[str, str]:
         local = _utc(self.clock()).astimezone(ZoneInfo(self.settings.timezone))
         title = "A quick follow-up from Bob" if followup else "School changes worth your attention"
-        sections = ["Here's what changed—not another assignment list." if not followup else "One follow-up on the information I still need. Reply in DueSoon whenever you can."]
+        sections = ["Here's what changed and what needs your attention." if not followup else "One follow-up on the information I still need. Reply in DueSoon whenever you can."]
         if events and all(event.kind == "planning_review" for event in events):
             title = "School update preview"
             sections = ["Preview from current Canvas records, not a new professor announcement or deadline-change alert."]
@@ -226,24 +226,24 @@ class AcademicUpdateService:
                 payload = source.raw_payload or {}
                 course_name = course.name.partition("|")[2].strip() or course.name
                 posted = _date(source.source_published_at, local) if source.source_published_at else "date unknown — check Canvas"
-                sections.append(f"Course updates\n{_text(course_name, 45)} — {_text(str(payload.get('title') or 'Professor announcement'), 90)}\n"
-                                f"Posted {posted}.\nSource excerpt (not AI analysis): {announcement_excerpt(source)}\n"
+                sections.append(f"Course updates\nAnnouncement: {_text(course_name, 45)} — {_text(str(payload.get('title') or 'Professor announcement'), 90)}\n"
+                                f"Posted {posted}.\n\nSource excerpt (not AI analysis): {announcement_excerpt(source)}\n\n"
                                 "Next step: review the professor's full announcement in DueSoon; interpretation is not yet verified.")
             else:
                 assignment = session.scalar(select(Assignment).options(*assignment_load_options()).where(Assignment.id == event.assignment_id))
                 due = datetime.fromisoformat(event.facts["deadline"]) if event.facts.get("deadline") else None
                 when = _date(due, local) if due else "date unknown — check Canvas"
                 if event.kind == "planning_review":
-                    sections.append(f"Planning review\n{_label(assignment)}\nCurrent verified deadline: {when}.\n"
+                    sections.append(f"Planning review\nAssignment: {_label(assignment)}\n\nCurrent verified deadline: {when}.\n\n"
                                     "Next step: review how this fits around your work shifts. No date change is being asserted.")
                 elif event.kind == "deadline_change":
                     before = datetime.fromisoformat(event.facts["before"]) if event.facts.get("before") else None
-                    sections.append(f"Deadline changes\n{_label(assignment)}\nWas {_date(before, local) if before else 'date unknown'}; now {when}.\nNext step: review your plan against the updated date.")
+                    sections.append(f"Deadline changes\nAssignment: {_label(assignment)}\n\nWas {_date(before, local) if before else 'date unknown'}.\nCurrent verified deadline: {when}.\n\nNext step: review your plan against the updated date.")
                 elif event.kind == "deadline_conflict":
                     alternatives = "; ".join(_date(datetime.fromisoformat(value), local) for value in event.facts.get("candidates", []))
-                    sections.append(f"Information needed\n{_label(assignment)}\nSources disagree: {alternatives or when}.\nWhy it matters: reminders protect the earliest credible date; the final deadline still needs review.")
+                    sections.append(f"Information needed\nAssignment: {_label(assignment)}\n\nSources disagree: {alternatives or when}.\n\nWhy it matters: reminders protect the earliest credible date; the final deadline still needs review.")
                 else:
-                    sections.append(f"Information needed\n{_label(assignment)}\n{when}.\nWhy it matters: timing is missing, so exact deadline planning is not possible.")
+                    sections.append(f"Information needed\nAssignment: {_label(assignment)}\n\n{when}.\n\nWhy it matters: timing is missing, so exact deadline planning is not possible.")
             if event.question:
                 sections.append(event.question)
             if self.settings.public_origin:
@@ -261,7 +261,8 @@ class AcademicUpdateService:
                     event.status = "superseded"
                     continue
                 _, candidate = self._render(session, [*selected, event], followup=followup)
-                if len(_description(candidate)) > 3900:
+                limit = 3900 if followup or not selected else 2700
+                if len(_description(candidate)) > limit:
                     break  # Remaining events stay pending for a later bundle.
                 selected.append(event)
             if not selected:
@@ -290,6 +291,54 @@ class AcademicUpdateService:
                 session.rollback()
                 return None
 
+    @staticmethod
+    def _assignments(session):
+        return list(session.scalars(select(Assignment).join(Course).options(*assignment_load_options()).where(
+            Course.active.is_(True), Assignment.published.is_(True),
+        )).all())
+
+    def _briefing_candidates(self, session, now):
+        """Bound live lookups; keep upcoming work from being crowded out by old overdue work."""
+        upcoming, overdue, completed = [], [], []
+        for assignment in self._assignments(session):
+            effective = project_canvas_assignment(assignment)
+            due = _utc(effective.operational_due_at) if effective.operational_due_at else None
+            if effective.submission_status in INCOMPLETE and due:
+                (upcoming if due >= now else overdue).append((due, assignment.id))
+            elif effective.submission_status in {"submitted", "graded"} and assignment.submission:
+                stamp = assignment.submission.submitted_at or assignment.submission.graded_at
+                if stamp and now-INTERVAL <= _utc(stamp) <= now:
+                    completed.append((_utc(stamp), assignment.id))
+        deadlines = sorted(upcoming)[:5] + sorted(overdue, reverse=True)[:2]
+        return ({key: stamp.isoformat() for stamp, key in deadlines},
+                {key: stamp.isoformat() for stamp, key in sorted(completed, reverse=True)[:3]})
+
+    def _with_briefing(self, session, body, deadlines, completed, states, now):
+        snapshot = session.scalar(select(func.max(SyncRun.finished_at)).where(
+            SyncRun.source_system == "canvas", SyncRun.status == "completed", SyncRun.finished_at <= now,
+        ))
+        overview, groups = briefing_context(self._assignments(session), deadline_versions=deadlines,
+            completion_versions=completed, states=states, now=now, timezone=self.settings.timezone, snapshot_at=snapshot)
+        combined = f"{overview}\n\n{body}"
+        if len(_description(combined)) > 3900:
+            return body, []  # An unusually large required event takes precedence over optional context.
+        included = []
+        for heading, rows in groups:
+            accepted = []
+            for key, line in rows:
+                section = heading + "\n" + "\n".join([*accepted, line])
+                if len(_description(combined + "\n\n" + section)) > 3900:
+                    continue  # Never truncate an exact date, instruction, or reply link.
+                accepted.append(line)
+                included.append(key)
+            if accepted:
+                combined += "\n\n" + heading + "\n" + "\n".join(accepted)
+        if self.settings.public_origin:
+            link = f"Full workload and completed work: {self.settings.public_origin}/app/home"
+            if len(_description(combined + "\n\n" + link)) <= 3900:
+                combined += "\n\n" + link
+        return combined, included
+
     def _attempt(self, key: int) -> None:
         now = _utc(self.clock())
         with self.sessions() as session:
@@ -309,12 +358,25 @@ class AcademicUpdateService:
                 (AcademicUpdateEvent.followup_delivery_id if followup else AcademicUpdateEvent.discord_delivery_id) == key,
             ).order_by(AcademicUpdateEvent.id)).all())
             status, error_code, provider_id = "sent", None, None
+            states = {}
             try:
                 if now >= _utc(context.expires_at):
                     status, error_code = "suppressed_stale", "update_expired"
                 else:
                     valid = []
-                    states = {}
+                    deadlines, completed = {}, {}
+                    if delivery.notification_kind == "academic_update":
+                        deadlines, completed = self._briefing_candidates(session, now)
+                        required_ids = {event.assignment_id for event in events if event.assignment_id}
+                        if not self.settings.dry_run and self.recheck is not None:
+                            # Optional context failures omit only those rows. Required
+                            # event checks remain last and fail closed below.
+                            for assignment_id in sorted((deadlines.keys() | completed.keys()) - required_ids):
+                                try:
+                                    states[str(assignment_id)] = self.recheck(assignment_id)
+                                except Exception:
+                                    states[str(assignment_id)] = "unknown"
+                                session.expire_all()
                     for event in events:
                         # Fresh external submission checks precede final local
                         # version validation, so completion cannot leak into alerts.
@@ -324,6 +386,7 @@ class AcademicUpdateService:
                             try:
                                 states[str(event.assignment_id)] = self.recheck(event.assignment_id)
                             except Exception:
+                                states[str(event.assignment_id)] = "unknown"
                                 raise LookupError("submission recheck failed") from None
                             session.expire_all()
                             state = states[str(event.assignment_id)]
@@ -344,6 +407,11 @@ class AcademicUpdateService:
                         status, error_code = "suppressed_stale", "update_no_longer_relevant"
                     else:
                         title, body = self._render(session, valid, followup=followup)
+                        if delivery.notification_kind == "academic_update":
+                            body, included = self._with_briefing(session, body, deadlines, completed, states, now)
+                            context.assignment_ids = sorted({*included, *(event.assignment_id for event in valid if event.assignment_id)})
+                            context.deadline_versions = {str(key): value for key, value in deadlines.items() if key in included}
+                            context.deadline_versions |= {str(event.assignment_id): event.facts["deadline"] for event in valid if event.assignment_id and event.facts.get("deadline")}
                         delivery.rendered_title, delivery.rendered_body = title, body
                         session.commit()
                         if self.settings.dry_run:
@@ -372,6 +440,10 @@ class AcademicUpdateService:
             except Exception:
                 # Never print exceptions carrying webhook URLs or course content.
                 status, error_code = "unknown", "unexpected_update_outcome"
+            if states:
+                # Preserve failed/unknown observations as well as successful checks.
+                context.submission_rechecked_at = self.clock()
+                context.submission_recheck_statuses = states
             delivery.status, delivery.error_code = status, error_code
             delivery.provider_message_id, delivery.completed_at = provider_id, self.clock()
             session.commit()

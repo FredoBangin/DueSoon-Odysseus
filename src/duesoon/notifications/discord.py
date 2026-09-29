@@ -45,11 +45,26 @@ def _log_text(value: str) -> str:
 
 
 def _description(value: str) -> str:
-    headings = {"Due Today", "Due This Week", "Due Later", "Deadline changes", "Recently completed", "Course updates", "What changed", "Why it matters", "Next step", "Information needed", "Planning review"}
-    return "\n".join(
-        f"**{line}**" if line in headings else re.sub(r"([\\*_~|\[\]<>#])", r"\\\1", _log_text(line))
-        for line in value.splitlines()
-    )
+    headings = {"School overview", "Due Today", "Due This Week", "Due Later", "Deadline changes", "Recently completed", "Course updates", "What changed", "Why it matters", "Next step", "Information needed", "Planning review"}
+    lines = []
+    for line in value.splitlines():
+        escaped = re.sub(r"([\\*_~|\[\]<>#])", r"\\\1", _log_text(line))
+        reply = re.fullmatch(r"Review or reply: (https://[A-Za-z0-9.-]+(?::\d+)?/app/assistant\?update=[1-9][0-9]{0,9})", line)
+        workload = re.fullmatch(r"Full workload and completed work: (https://[A-Za-z0-9.-]+(?::\d+)?/app/home)", line)
+        if line in headings:
+            lines.append(f"**{escaped}**")
+        elif reply or workload:
+            match = reply or workload
+            lines.append(f"[{'Reply in DueSoon' if reply else 'Open full school dashboard'}]({match[1]})")
+        elif line.startswith(("Assignment: ", "Announcement: ", "Current verified deadline: ")):
+            lines.append(f"**{escaped}**")
+        elif " — due " in line or " — completed; recorded " in line:
+            marker = " — due " if " — due " in line else " — completed; recorded "
+            label, _, date = escaped.partition(marker)
+            lines.append(f"**{label}**{marker}**{date}**")
+        else:
+            lines.append(escaped)
+    return "\n".join(lines)
 
 
 class DiscordWebhookPublisher:

@@ -19,7 +19,7 @@ function notificationBody(item) {
     body.append(node("p", text));
     return body;
   }
-  const headings = new Set(["Due Today", "Due This Week", "Due Later", "Deadline changes", "Recently completed", "Course updates", "Information needed", "What changed", "Why it matters", "Next step", "Planning review"]);
+  const headings = new Set(["School overview", "Due Today", "Due This Week", "Due Later", "Deadline changes", "Recently completed", "Course updates", "Information needed", "What changed", "Why it matters", "Next step", "Planning review"]);
   if (text.split("\n").some(line => headings.has(line.trim()))) {
     let group = null;
     for (const line of text.split("\n").map(value => value.trim()).filter(Boolean)) {
