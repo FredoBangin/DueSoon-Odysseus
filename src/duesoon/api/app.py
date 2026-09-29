@@ -49,6 +49,8 @@ from src.duesoon.google import (
     GoogleWorkspaceConfig,
 )
 from src.duesoon.notifications.ntfy import NtfyPublishError, NtfyPublisher
+from src.duesoon.notifications.discord import DiscordWebhookPublisher
+from src.duesoon.notifications.mirror import DiscordMirrorService
 from src.duesoon.notifications.service import NotificationService
 from src.duesoon.persistence.database import (
     create_engine_from_settings,
@@ -84,6 +86,7 @@ def create_app(
     engine: Any | None = None,
     canvas_sync_service: Any | None = None,
     notification_publisher: Any | None = None,
+    discord_publisher: Any | None = None,
     reminder_scheduler: Any | None = None,
     model_provider: Any | None = None,
     google_client: Any | None = None,
@@ -132,10 +135,20 @@ def create_app(
     if runtime_notification_publisher is None and runtime_settings.ntfy_enabled:
         owned_notification_publisher = NtfyPublisher(runtime_settings)
         runtime_notification_publisher = owned_notification_publisher
+    owned_discord_publisher: DiscordWebhookPublisher | None = None
+    runtime_discord_publisher = discord_publisher
+    if runtime_discord_publisher is None and runtime_settings.discord_enabled:
+        owned_discord_publisher = DiscordWebhookPublisher(runtime_settings)
+        runtime_discord_publisher = owned_discord_publisher
+    runtime_discord_mirror = DiscordMirrorService(
+        runtime_settings, runtime_sessions, runtime_discord_publisher,
+        submission_recheck=runtime_canvas_sync.refresh_submission if runtime_canvas_sync else None,
+    ) if runtime_settings.discord_enabled else None
     runtime_notifications = NotificationService(
         runtime_settings,
         runtime_sessions,
         runtime_notification_publisher,
+        discord_mirror=runtime_discord_mirror,
     )
     runtime_auth = AuthService(runtime_settings, runtime_sessions)
     runtime_planning = PlanningService(runtime_sessions)
@@ -221,6 +234,8 @@ def create_app(
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         try:
             create_schema(runtime_engine)
+            if runtime_discord_mirror is not None:
+                runtime_discord_mirror.recover_pending()
         except Exception:
             pass
         if runtime_scheduler is not None:
@@ -234,6 +249,8 @@ def create_app(
                 owned_canvas_client.close()
             if owned_notification_publisher is not None:
                 owned_notification_publisher.close()
+            if owned_discord_publisher is not None:
+                owned_discord_publisher.close()
             if owned_google_client is not None:
                 owned_google_client.close()
             runtime_engine.dispose()
@@ -303,6 +320,7 @@ def create_app(
             "dry_run": runtime_settings.dry_run,
             "scheduler_enabled": runtime_settings.scheduler_enabled,
             "notification_provider": "ntfy" if runtime_settings.ntfy_enabled else "disabled",
+            "discord_enabled": runtime_settings.discord_enabled,
         }
 
     @application.post(

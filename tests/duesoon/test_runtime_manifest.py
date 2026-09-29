@@ -73,6 +73,11 @@ def test_dockerfile_runs_only_due_soon_as_non_root() -> None:
     assert "app:app" not in dockerfile.replace("src.duesoon.api.app:app", "")
 
 
+def test_docker_context_excludes_secrets_and_local_deployment_tools() -> None:
+    excluded = set(read(".dockerignore").splitlines())
+    assert {".env", ".env.*", ".secrets/", ".tools/", ".tmp/", ".codex/", ".worktrees/"} <= excluded
+
+
 def test_compose_contains_only_due_soon_and_ntfy_services() -> None:
     compose = read("docker-compose.yml")
 

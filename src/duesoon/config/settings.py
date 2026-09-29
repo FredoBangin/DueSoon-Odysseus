@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from functools import lru_cache
+import re
 from typing import Literal
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field, SecretStr, model_validator
@@ -19,6 +21,7 @@ class DueSoonSettings(BaseSettings):
         env_prefix="DUESOON_",
         extra="ignore",
         populate_by_name=True,
+        hide_input_in_errors=True,
     )
 
     environment: Literal["development", "test", "production"] = Field(
@@ -51,6 +54,10 @@ class DueSoonSettings(BaseSettings):
     ntfy_topic: SecretStr | None = None
     ntfy_token: SecretStr | None = None
     ntfy_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
+
+    discord_enabled: bool = False
+    discord_webhook_url: SecretStr | None = None
+    discord_timeout_seconds: float = Field(default=10.0, gt=0, le=30)
 
     canvas_enabled: bool = False
     canvas_base_url: str | None = None
@@ -111,6 +118,17 @@ class DueSoonSettings(BaseSettings):
 
         if self.canvas_base_url:
             self.canvas_base_url = self.canvas_base_url.rstrip("/")
+
+        if self.discord_enabled:
+            if self.discord_webhook_url is None:
+                raise ValueError("Discord delivery requires DUESOON_DISCORD_WEBHOOK_URL")
+            url = urlsplit(self.discord_webhook_url.get_secret_value())
+            if (
+                url.scheme != "https" or url.netloc != "discord.com"
+                or url.query or url.fragment
+                or not re.fullmatch(r"/api/(?:v\d+/)?webhooks/\d+/[A-Za-z0-9_-]+", url.path)
+            ):
+                raise ValueError("Discord webhook must be an HTTPS discord.com webhook URL")
 
         if self.canvas_enabled:
             missing = []

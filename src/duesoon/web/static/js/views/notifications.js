@@ -2,7 +2,7 @@ import {get} from "../api.js";
 import {node} from "./home.js";
 
 function deliveryLabel(item, timezone) {
-  const status = {sent: "Sent", failed: "Failed", dry_run: "Preview", pending: "Pending", retry_scheduled: "Retry scheduled", outcome_unknown: "Delivery unconfirmed"}[item.status] || String(item.status).replaceAll("_", " ");
+  const status = {sent: "Sent", failed: "Failed", dry_run: "Preview", pending: "Pending", retry_scheduled: "Retry scheduled", unknown: "Delivery unconfirmed", outcome_unknown: "Delivery unconfirmed", suppressed_submission: "Suppressed: work completed", suppressed_stale: "Suppressed: deadline changed or expired"}[item.status] || String(item.status).replaceAll("_", " ");
   const date = new Date(item.completed_at || item.attempted_at || "");
   if (Number.isNaN(date.getTime())) return `${status} · Date unavailable · ${item.provider}`;
   const formatted = new Intl.DateTimeFormat("en-US", {

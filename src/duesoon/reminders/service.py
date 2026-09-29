@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 from typing import Callable
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -63,6 +63,7 @@ class ReminderService:
 
     def run_once(self) -> ReminderRunSummary:
         self._canvas_sync.sync()
+        self._notifications.retry_pending()
         now = _as_utc(self._clock())
         previous = self._last_successful_evaluation()
         assignments = self._assignments()
@@ -147,6 +148,8 @@ class ReminderService:
                     if reminder_kind == "adaptive"
                     else "deadline_checkpoint"
                 ),
+                assignment_deadlines={assignment.id: deadline},
+                expires_at=deadline,
             )
             final_status = (
                 "sent"
@@ -234,6 +237,8 @@ class ReminderService:
             message=_daily_digest_body(active, local_now),
             priority=3,
             notification_kind="daily_digest",
+            assignment_deadlines={assignment.id: effective.operational_due_at for assignment, effective in active},
+            expires_at=datetime.combine(local_now.date() + timedelta(days=1), time.min, tzinfo=local_now.tzinfo),
         )
         return "sent" if result.status in {"sent", "already_sent"} else result.status
 

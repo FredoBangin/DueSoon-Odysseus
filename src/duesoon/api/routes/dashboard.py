@@ -448,6 +448,7 @@ def settings(request: Request):
             },
             "dry_run": value.dry_run,
             "features": {
+                "discord_notifications": "enabled" if value.discord_enabled else "disabled",
                 "model_assistant": "configured" if model["enabled"] and model["configured"] else (
                     "configured" if model["configured"] else "disabled"
                 ),

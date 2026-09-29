@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
+import logging
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -10,7 +12,11 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from src.duesoon.config.settings import DueSoonSettings
 from src.duesoon.notifications.ntfy import NtfyPublishError, NtfyPublisher
+from src.duesoon.notifications.mirror import DiscordMirrorService
 from src.duesoon.persistence.models import NotificationDelivery, utc_now
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -28,10 +34,13 @@ class NotificationService:
         settings: DueSoonSettings,
         sessions: sessionmaker[Session],
         publisher: NtfyPublisher | None,
+        *,
+        discord_mirror: DiscordMirrorService | None = None,
     ) -> None:
         self._settings = settings
         self._sessions = sessions
         self._publisher = publisher
+        self._discord_mirror = discord_mirror
 
     def send_test(
         self,
@@ -41,7 +50,7 @@ class NotificationService:
         message: str,
         priority: int,
     ) -> DeliveryResult:
-        return self._send(
+        result = self._send(
             idempotency_key=idempotency_key,
             notification_kind="controlled_test",
             title=title,
@@ -49,6 +58,8 @@ class NotificationService:
             priority=priority,
             tags=["white_check_mark"],
         )
+        self._mirror(result, assignment_deadlines={}, expires_at=None)
+        return result
 
     def send_reminder(
         self,
@@ -58,8 +69,10 @@ class NotificationService:
         message: str,
         priority: int,
         notification_kind: str = "deadline_checkpoint",
+        assignment_deadlines: dict[int, datetime] | None = None,
+        expires_at: datetime | None = None,
     ) -> DeliveryResult:
-        return self._send(
+        result = self._send(
             idempotency_key=idempotency_key,
             notification_kind=notification_kind,
             title=title,
@@ -67,6 +80,19 @@ class NotificationService:
             priority=priority,
             tags=["warning" if notification_kind.startswith("adaptive") else "alarm_clock"],
         )
+        self._mirror(result, assignment_deadlines=assignment_deadlines or {}, expires_at=expires_at)
+        return result
+
+    def _mirror(self, result: DeliveryResult, *, assignment_deadlines: dict[int, datetime], expires_at: datetime | None) -> None:
+        if self._discord_mirror is not None and result.status in {"sent", "dry_run"}:
+            self._discord_mirror.enqueue(result.delivery_id, assignment_deadlines=assignment_deadlines, expires_at=expires_at)
+
+    def retry_pending(self) -> None:
+        if self._discord_mirror is not None:
+            try:
+                self._discord_mirror.run_once()
+            except Exception:
+                logger.error("Discord retry cycle failed; primary reminder evaluation continues")
 
     def _send(
         self,

@@ -370,6 +370,23 @@ class NotificationDelivery(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
+class NotificationMirrorContext(Base):
+    """Retry safety context for optional secondary notification deliveries."""
+
+    __tablename__ = "notification_mirror_contexts"
+
+    delivery_id: Mapped[int] = mapped_column(
+        ForeignKey("notification_deliveries.id", ondelete="RESTRICT"), primary_key=True
+    )
+    assignment_ids: Mapped[list[int]] = mapped_column(JSON, default=list)
+    deadline_versions: Mapped[dict[str, str]] = mapped_column(JSON, default=dict)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    next_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    submission_rechecked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    submission_recheck_statuses: Mapped[dict[str, str]] = mapped_column(JSON, default=dict)
+
+
 class ReminderEvent(Base):
     __tablename__ = "reminder_events"
     __table_args__ = (

@@ -39,6 +39,7 @@ def test_system_info_contains_only_non_secret_metadata(tmp_path: Path) -> None:
         tmp_path,
         api_token="api-secret",
         ntfy_token="ntfy-secret",
+        discord_webhook_url="https://discord.com/api/webhooks/123/discord-secret",
     ) as client:
         response = client.get("/api/v1/system/info")
 
@@ -51,9 +52,11 @@ def test_system_info_contains_only_non_secret_metadata(tmp_path: Path) -> None:
         "dry_run": True,
         "scheduler_enabled": False,
         "notification_provider": "disabled",
+        "discord_enabled": False,
     }
     assert "api-secret" not in response.text
     assert "ntfy-secret" not in response.text
+    assert "discord-secret" not in response.text
 
 
 def test_inherited_high_risk_routes_are_not_registered(tmp_path: Path) -> None:

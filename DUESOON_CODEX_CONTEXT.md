@@ -1031,7 +1031,7 @@ Future personalization may change adaptive timing, but it must respect hard safe
 
 ## 15. Notification Delivery: ntfy Primary
 
-Private ntfy delivery is the required initial provider. The production target is a self-hosted ntfy service on Azure with HTTPS, authentication, per-topic ACLs, persistent state, and iPhone delivery through ntfy's upstream APNs bridge. Twilio SMS is an optional future fallback adapter, not a prerequisite for the initial release. WhatsApp, Telegram, and iMessage are out of scope unless explicitly reauthorized.
+Private ntfy delivery is the required primary provider. The production target is a self-hosted ntfy service on Azure with HTTPS, authentication, per-topic ACLs, persistent state, and iPhone delivery through ntfy's upstream APNs bridge. The owner approved an optional Discord webhook mirror on 2026-09-28; its safety and lifecycle contract is recorded in `docs/architecture/2026-09-28-discord-notification-mirror.md`. Discord is not a replacement for ntfy. Twilio SMS is an optional future fallback adapter, not a prerequisite for the initial release. WhatsApp, Telegram, and iMessage are out of scope unless explicitly reauthorized.
 
 ### 15.1 Authentication and iPhone delivery
 

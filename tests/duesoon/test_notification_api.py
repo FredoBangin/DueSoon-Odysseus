@@ -160,3 +160,21 @@ def test_retryable_provider_rejection_reuses_delivery_intent(tmp_path: Path) -> 
         deliveries = session.scalars(select(NotificationDelivery)).all()
         assert len(deliveries) == 1
         assert deliveries[0].status == "sent"
+
+
+def test_controlled_test_mirrors_to_discord_without_changing_primary_response(tmp_path: Path) -> None:
+    settings = build_settings(
+        tmp_path, dry_run=False, ntfy_enabled=True, ntfy_url="https://notify.example.test",
+        ntfy_topic="private-topic", ntfy_token="ntfy-token", discord_enabled=True,
+        discord_webhook_url="https://discord.com/api/webhooks/123/fake-secret",
+    )
+    engine = create_engine_from_settings(settings)
+    primary, discord = FakePublisher(), FakePublisher()
+    with TestClient(create_app(settings, engine=engine, notification_publisher=primary, discord_publisher=discord)) as client:
+        first = notification_request(client, key="mirror-test")
+        duplicate = notification_request(client, key="mirror-test")
+    assert first.json()["status"] == "sent"
+    assert duplicate.json()["status"] == "already_sent"
+    assert len(primary.calls) == len(discord.calls) == 1
+    with session_factory(engine)() as session:
+        assert {row.provider for row in session.scalars(select(NotificationDelivery)).all()} == {"ntfy", "discord"}

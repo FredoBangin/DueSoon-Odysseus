@@ -93,6 +93,13 @@ When `DUESOON_API_TOKEN` is configured, sync and all academic-data endpoints req
 
 ntfy starts with default access set to `deny-all`. Create a user/token and grant only that user access to the private DueSoon topic before enabling `DUESOON_NTFY_ENABLED`. Production also requires HTTPS and an iPhone subscription to the self-hosted server/topic.
 
+Optional Discord mirrors use `DUESOON_DISCORD_ENABLED=true` and a secret
+`DUESOON_DISCORD_WEBHOOK_URL` in the ignored environment file. ntfy remains primary;
+only new deliveries are mirrored. Use a private Discord channel and rotate any
+webhook URL shared in chat. Each mirror is separately audited, checks Canvas again,
+and cannot interrupt ntfy on failure. See the
+[Discord mirror safety contract](docs/architecture/2026-09-28-discord-notification-mirror.md).
+
 ## Azure Storage
 
 Initial production target is one Azure Linux VM using Docker Compose. Mount an attached Azure managed disk on the host, set `DUESOON_DATA_DIR` to a directory on that disk, and keep exactly one scheduler. Do not store SQLite on Azure Files.
