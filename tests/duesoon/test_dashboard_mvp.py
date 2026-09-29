@@ -176,6 +176,17 @@ def test_login_session_csrf_and_logout(tmp_path: Path) -> None:
         assert client.get("/api/v1/auth/session").status_code == 401
 
 
+def test_discord_reply_context_survives_login_without_open_redirect(tmp_path):
+    client, _engine = build(tmp_path)
+    with client:
+        response = client.get("/app/assistant?update=144", follow_redirects=False)
+        assert response.status_code == 303 and response.headers["location"] == "/login?update=144"
+        for invalid in ("0", "-1", "https://evil.test", "//evil.test", "<script>", "12345678901234567890"):
+            response = client.get("/app/assistant", params={"update":invalid}, follow_redirects=False)
+            assert response.headers["location"] == "/login"
+        assert client.get("/app/home?update=144",follow_redirects=False).headers["location"] == "/login"
+
+
 def test_dashboard_uses_real_canvas_records_and_is_browser_guarded(tmp_path: Path) -> None:
     client, engine = build(tmp_path)
     now = datetime.now(UTC)

@@ -50,6 +50,8 @@ Linked replies pin the selected update into existing assistant retrieval. When
 the provider is unavailable, the answer states that context was saved and AI
 interpretation is unavailable. The answer shown to the owner is also the audited
 answer. Learning never silently changes canonical deadlines or reminder timing.
+Reply links preserve a strictly validated numeric update ID through sign-in.
+No arbitrary external return URL is accepted by the login flow.
 
 ## Privacy and safe delivery
 

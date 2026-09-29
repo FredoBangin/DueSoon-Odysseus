@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import FileResponse, RedirectResponse
@@ -81,5 +82,10 @@ def app_page(request: Request, path: str = ""):
     try:
         require_browser_session(request)
     except HTTPException:
+        update_id = request.query_params.get("update", "")
+        # Preserve only this known internal destination, not an arbitrary
+        # return URL that could turn sign-in into an open redirect.
+        if path == "assistant" and re.fullmatch(r"[1-9][0-9]{0,9}", update_id):
+            return RedirectResponse(f"/login?update={update_id}", status_code=303)
         return RedirectResponse("/login", status_code=303)
     return FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-store"})
