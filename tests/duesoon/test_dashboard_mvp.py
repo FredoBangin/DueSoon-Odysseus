@@ -11,6 +11,9 @@ from src.duesoon.config.settings import DueSoonSettings
 from src.duesoon.persistence.database import create_engine_from_settings, session_factory
 from src.duesoon.persistence.models import (
     Assignment,
+    AcademicNote,
+    AcademicUpdateEvent,
+    AssistantExchange,
     AssignmentEvidence,
     AssignmentSnapshot,
     Claim,
@@ -95,6 +98,41 @@ def test_password_hash_round_trip() -> None:
     encoded = hash_password("correct-password-123")
     assert verify_password("correct-password-123", encoded)
     assert not verify_password("wrong-password-123", encoded)
+
+
+def test_linked_update_requires_owner_session_csrf_and_saves_context_only(tmp_path, monkeypatch):
+    # Provider setup remains deferred. No developer's environment key is used.
+    monkeypatch.delenv("DUESOON_MODEL_API_KEY", raising=False)
+    monkeypatch.setenv("DUESOON_MODEL_ENABLED", "false")
+    client, engine = build(tmp_path)
+    now = datetime.now(UTC)
+    with client:
+        with session_factory(engine)() as session:
+            course = Course(canvas_course_id="123", name="Sample course")
+            assignment = Assignment(canvas_assignment_id="abc", course=course, canonical_title="Midterm",
+                published=True, first_seen_at=now, last_seen_at=now)
+            session.add(assignment)
+            session.flush()
+            event = AcademicUpdateEvent(event_key="question", kind="information_needed", assignment_id=assignment.id,
+                facts={"deadline":None}, question="What did the professor say?", observed_at=now, status="notified")
+            session.add(event)
+            session.commit()
+            key, assignment_id = event.id, assignment.id
+        assert client.get(f"/api/v1/dashboard/academic-updates/{key}").status_code == 401
+        csrf = login(client)
+        assert client.get(f"/api/v1/dashboard/academic-updates/{key}").json()["question"] == "What did the professor say?"
+        payload = {"question":"18 questions, and the professor mentioned next Friday. Keep dates unchanged until verified.", "update_id":key}
+        assert client.post("/api/v1/dashboard/assistant", json=payload).status_code == 403
+        response = client.post("/api/v1/dashboard/assistant", headers={"X-CSRF-Token":csrf}, json=payload)
+        assert response.status_code == 200 and response.json()["note_saved"]
+        assert "AI interpretation is unavailable" in response.json()["answer"]
+        with session_factory(engine)() as session:
+            assert session.get(AcademicUpdateEvent,key).answered_at is not None
+            assert session.get(Assignment,assignment_id).canvas_due_at is None
+            assert "18 questions" in session.query(AcademicNote).one().body
+            assert session.query(AssistantExchange).one().answer == response.json()["answer"]
+        assert client.post("/api/v1/dashboard/assistant", headers={"X-CSRF-Token":csrf}, json={**payload,"update_id":999}).status_code == 404
+    engine.dispose()
 
 
 def test_notification_history_preserves_body_and_exposes_display_timezone(tmp_path: Path) -> None:

@@ -140,6 +140,11 @@ class AssistantService:
 
     def answer(self, question: str, snapshot: dict[str, Any]) -> dict[str, Any]:
         baseline = self._deterministic.answer(question, snapshot)
+        if snapshot.get("academic_update"):
+            # Linked replies need interpretation of their actual update, not a
+            # keyword-matched generic answer. Missing/failed AI stays explicit.
+            baseline.update(intent="unsupported", confidence="high", evidence=[],
+                answer="Your context is saved in Notes and linked to this update. No deadline, submission status, or reminder was changed. AI interpretation is unavailable for this reply; review the original evidence before confirming changes.")
         retrieval = self._retrieval.retrieve(question, snapshot)
         settings = self._model_settings.effective()
         result = dict(baseline)

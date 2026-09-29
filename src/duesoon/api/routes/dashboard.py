@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 class AssistantRequest(BaseModel):
     question: str = Field(min_length=1, max_length=500)
+    update_id: int | None = Field(default=None, ge=1)
 
 
 class AssistantFeedbackRequest(BaseModel):
@@ -195,7 +196,26 @@ def sync_gmail(
 
 @router.post("/assistant", dependencies=[Depends(require_csrf)])
 def assistant(payload: AssistantRequest, request: Request):
-    return request.app.state.assistant.answer(payload.question, request.app.state.briefing.snapshot())
+    snapshot = request.app.state.briefing.snapshot()
+    if payload.update_id is not None:
+        if not payload.question.strip():
+            raise HTTPException(status_code=422, detail="A reply cannot be blank")
+        try:
+            snapshot["academic_update"] = request.app.state.academic_updates.remember_reply(payload.update_id, payload.question)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail="Academic update not found") from exc
+    result = request.app.state.assistant.answer(payload.question, snapshot)
+    if payload.update_id is not None:
+        result["note_saved"] = True
+    return result
+
+
+@router.get("/academic-updates/{event_id}")
+def academic_update(event_id: int, request: Request):
+    try:
+        return request.app.state.academic_updates.inspect(event_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail="Academic update not found") from exc
 
 
 @router.post("/assistant/{answer_id}/feedback", dependencies=[Depends(require_csrf)])

@@ -15,11 +15,11 @@ function deliveryLabel(item, timezone) {
 function notificationBody(item) {
   const body = node("div", "", "duesoon-notification-body");
   const text = String(item.body || "").replaceAll("\r\n", "\n");
-  if (item.kind !== "daily_digest") {
+  if (!["daily_digest", "academic_update", "academic_followup", "academic_update_preview"].includes(item.kind)) {
     body.append(node("p", text));
     return body;
   }
-  const headings = new Set(["Due Today", "Due This Week", "Due Later"]);
+  const headings = new Set(["Due Today", "Due This Week", "Due Later", "Deadline changes", "Recently completed", "Course updates", "Information needed", "What changed", "Why it matters", "Next step", "Planning review"]);
   if (text.split("\n").some(line => headings.has(line.trim()))) {
     let group = null;
     for (const line of text.split("\n").map(value => value.trim()).filter(Boolean)) {
@@ -27,10 +27,12 @@ function notificationBody(item) {
         group = node("section", "", "duesoon-notification-group");
         group.append(node("h3", line));
         body.append(group);
-      } else if (/^\+ \d+ more in dashboard\.$/u.test(line)) {
+      } else if (/^\+ \d+ more in dashboard\.$/u.test(line) || line.startsWith("Update window:")) {
         body.append(node("p", line, "admin-toggle-sub"));
       } else if (group) {
         group.append(node("div", line, "duesoon-notification-entry"));
+      } else {
+        body.append(node("p", line));
       }
     }
     return body;

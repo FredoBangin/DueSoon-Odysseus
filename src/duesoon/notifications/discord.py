@@ -1,5 +1,3 @@
-"""Secret-safe Discord webhook publisher with log-style rich embeds."""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -43,8 +41,15 @@ for _name in ("httpx", "httpcore.http11", "httpcore.http2"):
 
 
 def _log_text(value: str) -> str:
-    # Academic titles cannot close the code fence or create active mentions.
     return "".join(char for char in value if char in "\n\t" or ord(char) >= 32).replace("`", "ˋ")
+
+
+def _description(value: str) -> str:
+    headings = {"Due Today", "Due This Week", "Due Later", "Deadline changes", "Recently completed", "Course updates", "What changed", "Why it matters", "Next step", "Information needed", "Planning review"}
+    return "\n".join(
+        f"**{line}**" if line in headings else re.sub(r"([\\*_~|\[\]<>#])", r"\\\1", _log_text(line))
+        for line in value.splitlines()
+    )
 
 
 class DiscordWebhookPublisher:
@@ -64,19 +69,18 @@ class DiscordWebhookPublisher:
 
     def publish(self, *, title: str, message: str, priority: int = 3, **_unused: object) -> PublishResult:
         now = self._clock().astimezone(UTC)
-        header = f"[{now.astimezone(self._timezone).strftime('%Y-%m-%d %H:%M:%S %Z')}] {_log_text(title)}"
-        lines = [header, *_log_text(message).splitlines()]
-        description = "```text\n" + "\n".join(f"{index:>2} {line}" for index, line in enumerate(lines, 1)) + "\n```"
+        description = _description(message)
         if len(description) > 4096:
             raise DiscordPublishError("Discord embed exceeds the description limit")
         payload = {
-            "username": "DueSoon",
+            "username": "Bob, From DueSoon",
             "allowed_mentions": {"parse": []},
             "embeds": [{
-                "author": {"name": "🖥️ DUESOON LOG"},
+                "title": _log_text(title)[:256],
                 "description": description,
                 "color": 0xF39C12,
                 "timestamp": now.isoformat(),
+                "footer": {"text": f"Updated {now.astimezone(self._timezone).strftime('%A, %B %d, %Y at %I:%M %p %Z')}"},
             }],
         }
         try:

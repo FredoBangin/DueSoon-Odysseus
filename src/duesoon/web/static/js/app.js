@@ -27,7 +27,7 @@ function closeSidebar(){
   window.closeDueSoonSidebar?.();
 }
 
-async function show(view,question=""){
+async function show(view,question="",updateId=null){
   if(view==="settings"){
     markActive("settings");
     closeSidebar();
@@ -44,13 +44,13 @@ async function show(view,question=""){
   setSettingsOpen(false);
   markActive(view);
   title.textContent=titles[view]||view[0].toUpperCase()+view.slice(1);
-  history.replaceState({},"",`/app/${view}`);
+  history.replaceState({},"",`/app/${view}${view==="assistant"&&updateId?`?update=${updateId}`:""}`);
   closeSidebar();
   try{
     if(view==="home"){
       const briefing=await get("/api/v1/dashboard/briefing");
       renderHome(root,briefing,value=>show("assistant",value));
-    }else if(view==="assistant") await renderAssistant(root,question,await get("/api/v1/dashboard/model-settings"));
+    }else if(view==="assistant") await renderAssistant(root,question,await get("/api/v1/dashboard/model-settings"),updateId);
     else if(view==="calendar") await renderCalendar(root);
     else if(view==="email") await renderEmail(root);
     else if(view==="notifications") await renderNotifications(root);
@@ -88,11 +88,15 @@ document.querySelector("#logout").addEventListener("click",async()=>{
 document.querySelectorAll("[data-close-settings]").forEach(button=>button.addEventListener("click",()=>setSettingsOpen(false)));
 settingsModal.addEventListener("click",event=>{if(event.target===settingsModal)setSettingsOpen(false);});
 document.addEventListener("keydown",event=>{if(event.key==="Escape"&&!settingsModal.classList.contains("hidden"))setSettingsOpen(false);});
-window.addEventListener("popstate",()=>show(location.pathname.split("/")[2]||"home"));
+function linkedUpdate(){
+  const value=Number(new URLSearchParams(location.search).get("update"));
+  return Number.isSafeInteger(value)&&value>0?value:null;
+}
+window.addEventListener("popstate",()=>show(location.pathname.split("/")[2]||"home","",linkedUpdate()));
 const initialView=location.pathname.split("/")[2]||"home";
 if(initialView==="settings"){
   await show("home");
   await show("settings");
 }else{
-  await show(initialView);
+  await show(initialView,"",linkedUpdate());
 }

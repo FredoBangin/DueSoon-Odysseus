@@ -80,7 +80,8 @@ class NotificationService:
             priority=priority,
             tags=["warning" if notification_kind.startswith("adaptive") else "alarm_clock"],
         )
-        self._mirror(result, assignment_deadlines=assignment_deadlines or {}, expires_at=expires_at)
+        # Discord is an occasional academic-update channel, not a second copy
+        # of every checkpoint, adaptive reminder, or daily ntfy briefing.
         return result
 
     def _mirror(self, result: DeliveryResult, *, assignment_deadlines: dict[int, datetime], expires_at: datetime | None) -> None:

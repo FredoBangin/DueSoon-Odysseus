@@ -8,7 +8,7 @@ It is the foundational product specification and learning base, not optional not
 - Keep AI bounded to extraction and interpretation; deterministic code owns exact behavior.
 - Never send a reminder without an immediate Canvas submission recheck.
 - Preserve checkpoint crossing, deduplication, dry-run behavior, and auditability.
-- Private ntfy delivery remains primary. Owner-approved Discord webhook delivery is an optional, independently audited mirror; Twilio remains an optional future adapter.
+- Private ntfy delivery remains primary. Owner-approved Discord delivery is an optional, independently audited academic-update channel (48-hour bundles, no routine reminder mirrors); Twilio remains an optional future adapter.
 - Never expose or commit secrets or student academic content.
 - Preserve the legacy DueSoon repository and its recovery checkpoint.
 - Add or update tests with every behavior change.

@@ -123,6 +123,18 @@ class AssistantRetrievalService:
         consulted: list[str] = []
         assumptions: list[str] = []
 
+        update_context = snapshot.get("academic_update")
+        if isinstance(update_context, dict):
+            evidence_id = f"academic_update:{update_context['id']}"
+            facts.append({"evidence_id": evidence_id, "source": "academic_update",
+                          "text": str(update_context.get("body", ""))[:3000],
+                          "question": update_context.get("question"),
+                          "authority": "context_only_not_deadline_confirmation"})
+            catalog[evidence_id] = {"label": "Bob's school update",
+                "href": f"/app/assistant?update={update_context['id']}"}
+            consulted.append("academic_update")
+            assumptions.append("Owner replies are context, not verified deadline changes.")
+
         self._assignment_facts(tokens, snapshot, facts, catalog, consulted)
         with self.sessions() as session:
             self._source_facts(session, tokens, facts, catalog, consulted)

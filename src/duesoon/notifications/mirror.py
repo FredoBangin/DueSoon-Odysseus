@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 import logging
 from typing import Callable
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -14,7 +14,10 @@ from src.duesoon.config.settings import DueSoonSettings
 from src.duesoon.assignments.effective import project_canvas_assignment
 from src.duesoon.intelligence.service import assignment_load_options
 from src.duesoon.notifications.discord import DiscordPublishError, DiscordWebhookPublisher
-from src.duesoon.persistence.models import Assignment, NotificationDelivery, NotificationMirrorContext
+from src.duesoon.notifications.briefing import school_update
+from src.duesoon.persistence.models import (
+    Assignment, Course, NotificationDelivery, NotificationMirrorContext, SourceRecord, Submission,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -44,6 +47,11 @@ class DiscordMirrorService:
                 NotificationDelivery.provider == "discord",
                 NotificationDelivery.status == "pending",
             ).values(status="unknown", error_code="interrupted_outcome", completed_at=self._clock()))
+            session.execute(update(NotificationDelivery).where(
+                NotificationDelivery.provider == "discord",
+                NotificationDelivery.notification_kind.notin_(("controlled_test", "academic_update", "academic_followup", "daily_digest_preview")),
+                NotificationDelivery.status == "retry_scheduled",
+            ).values(status="suppressed_policy", error_code="routine_mirroring_disabled", completed_at=self._clock()))
             session.commit()
 
     def enqueue(
@@ -62,7 +70,7 @@ class DiscordMirrorService:
         now = _utc(self._clock())
         with self._sessions() as session:
             source = session.get(NotificationDelivery, source_id)
-            if source is None or source.status not in {"sent", "dry_run"}:
+            if source is None or source.status not in {"sent", "dry_run"} or source.notification_kind != "controlled_test":
                 return
             key = f"discord:{source.id}"
             if session.scalar(select(NotificationDelivery.id).where(NotificationDelivery.dedup_key == key)):
@@ -98,6 +106,7 @@ class DiscordMirrorService:
                 NotificationMirrorContext.delivery_id == NotificationDelivery.id,
             ).where(
                 NotificationDelivery.provider == "discord",
+                NotificationDelivery.notification_kind == "controlled_test",
                 NotificationDelivery.status == "retry_scheduled",
                 NotificationMirrorContext.next_attempt_at <= self._clock(),
             ).order_by(NotificationDelivery.id).limit(20)).all()
@@ -132,8 +141,19 @@ class DiscordMirrorService:
             self._finish(delivery_id, "suppressed_stale", "expired")
             return
         if self._settings.dry_run:
+            if kind == "daily_digest":
+                self._daily_update(delivery_id, assignment_ids, now, {})
             self._finish(delivery_id, "dry_run", None)
             return
+        completed_states: dict[int, str] = {}
+        if kind == "daily_digest" and self._recheck is not None:
+            # Recheck optional completion updates first, then the actual reminders
+            # immediately before delivery. A failed optional check never asserts completion.
+            for key in self._recent_completion_ids(self._update_window(now), now):
+                try:
+                    completed_states[key] = self._recheck(key)
+                except Exception:
+                    completed_states[key] = "unknown"
         if kind != "controlled_test":
             if not assignment_ids or self._recheck is None:
                 self._finish(delivery_id, "failed", "missing_recheck_context")
@@ -147,6 +167,7 @@ class DiscordMirrorService:
                 context = session.get(NotificationMirrorContext, delivery_id)
                 context.submission_rechecked_at = self._clock()
                 context.submission_recheck_statuses = {str(key): state for key, state in zip(assignment_ids, states)}
+                context.submission_recheck_statuses.update({str(key): state for key, state in completed_states.items()})
                 assignments = session.scalars(select(Assignment).options(*assignment_load_options()).where(
                     Assignment.id.in_(assignment_ids)
                 )).all()
@@ -169,6 +190,12 @@ class DiscordMirrorService:
         if self._publisher is None:
             self._finish(delivery_id, "failed", "provider_disabled")
             return
+        if kind == "daily_digest":
+            try:
+                title, message = self._daily_update(delivery_id, assignment_ids, now, completed_states)
+            except Exception:
+                self._finish(delivery_id, "failed", "briefing_render_failed")
+                return
         try:
             result = self._publisher.publish(title=title, message=message, priority=priority)
         except DiscordPublishError as exc:
@@ -181,6 +208,59 @@ class DiscordMirrorService:
             self._finish(delivery_id, "unknown", "unexpected_provider_outcome")
         else:
             self._finish(delivery_id, "sent", None, result.provider_message_id)
+
+    def _update_window(self, now: datetime) -> datetime:
+        with self._sessions() as session:
+            previous = session.scalar(select(NotificationDelivery.attempted_at).where(
+                NotificationDelivery.provider == "discord",
+                NotificationDelivery.notification_kind == "daily_digest",
+                NotificationDelivery.status == "sent",
+                NotificationDelivery.attempted_at < now,
+            ).order_by(NotificationDelivery.attempted_at.desc()).limit(1))
+        return max(now - timedelta(hours=24), _utc(previous)) if previous else now - timedelta(hours=24)
+
+    def _recent_completion_ids(self, start: datetime, now: datetime) -> list[int]:
+        with self._sessions() as session:
+            recorded = func.coalesce(Submission.submitted_at, Submission.graded_at)
+            return list(session.scalars(select(Assignment.id).join(Submission).join(Course).where(
+                Course.active.is_(True), Assignment.published.is_(True),
+                Submission.normalized_status.in_(("submitted", "graded")),
+                recorded > start, recorded <= now,
+            ).order_by(recorded.desc(), Assignment.id).limit(3)).all())
+
+    def _daily_update(
+        self, delivery_id: int, assignment_ids: tuple[int, ...], now: datetime,
+        completed_states: dict[int, str],
+    ) -> tuple[str, str]:
+        start = self._update_window(now)
+        with self._sessions() as session:
+            delivery = session.get(NotificationDelivery, delivery_id)
+            primary = session.get(NotificationDelivery, int(delivery.dedup_key.split(":", 1)[1]))
+            assignments = list(session.scalars(select(Assignment).options(*assignment_load_options()).where(
+                Assignment.id.in_(assignment_ids),
+            ).order_by(Assignment.id)).all())
+            confirmed = [key for key, state in completed_states.items() if state in {"submitted", "graded"}]
+            completed = list(session.scalars(select(Assignment).options(*assignment_load_options()).join(Submission).where(
+                Assignment.id.in_(confirmed), Submission.normalized_status.in_(("submitted", "graded")),
+                func.coalesce(Submission.submitted_at, Submission.graded_at) > start,
+                func.coalesce(Submission.submitted_at, Submission.graded_at) <= now,
+            ).order_by(func.coalesce(Submission.submitted_at, Submission.graded_at).desc(), Assignment.id)).all())
+            # Publication time prevents a first sync of old announcements from
+            # being presented as new professor activity. Versions count only once.
+            announcements = session.execute(select(SourceRecord.course_id, SourceRecord.external_id).join(Course).where(
+                Course.active.is_(True), SourceRecord.source_system == "canvas",
+                SourceRecord.source_type == "announcement", SourceRecord.ingestion_status == "ingested",
+                SourceRecord.observed_at > start, SourceRecord.observed_at <= now,
+                SourceRecord.source_published_at > start, SourceRecord.source_published_at <= now,
+            ).distinct()).all()
+            title, body = school_update(
+                assignments, original_message=primary.rendered_body,
+                completed=completed, announcements=len(announcements),
+                window_start=start, now=now, timezone=self._settings.timezone,
+            )
+            delivery.rendered_title, delivery.rendered_body = title, body
+            session.commit()
+            return title, body
 
     def _retry(self, delivery_id: int, attempts: int, code: str, retry_after: float | None = None) -> None:
         if attempts >= self.MAX_ATTEMPTS:

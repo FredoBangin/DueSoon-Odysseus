@@ -957,6 +957,30 @@ submitted or graded work is removed. The delivery uses a database-backed local-d
 key such as `daily-digest:2026-08-29`, obeys dry-run behavior, and records a `daily_digest`
 notification kind. No briefing is sent when no eligible active work remains.
 
+The owner revised Discord policy on 2026-09-29: it is an occasional academic-update
+channel, not a mirror of checkpoint, adaptive, or daily ntfy reminders. Use the
+display name `Bob, From DueSoon`, orange readable embeds, and exact local dates.
+Queue every new professor Canvas announcement (including nonurgent announcements),
+edited announcements, meaningful operational deadline changes, conflicts, and
+missing information affecting exam/project planning. Bundle pending nonurgent facts
+at most once every 48 hours; send no filler when nothing changed. Initial activation
+records a baseline rather than replaying historical posts. Urgent newly earlier
+deadlines or conflicts within 48 hours may alert through ntfy immediately after a
+fresh Canvas submission check; reuse an already-sent current-version checkpoint
+when it covers that risk. Deterministic code still owns deadlines and delivery.
+
+Updates state what changed, exact dates, source, why it matters, next action, and
+any information needed. Without a verified model, announcement text is a bounded,
+redacted source excerpt explicitly labeled `not AI analysis`; do not invent a
+summary or silently call an unconfigured provider. AI interpretation remains pending
+the owner's API-key setup and provider verification. Reply links open the existing
+authenticated dashboard assistant with the update context. Free-form replies are
+stored as private, linked Notes, stop that update's unanswered follow-up, and never
+automatically confirm a deadline. Send at most one unanswered follow-up after 48
+hours. A webhook does not read Discord replies; no Discord bot is introduced.
+All event facts, delivery outcomes, rechecks, retries, and replies remain audited.
+See `docs/architecture/2026-09-28-discord-notification-mirror.md` for the current policy.
+
 ---
 
 ## 13. Due-Date Changes and Schedule Reconciliation

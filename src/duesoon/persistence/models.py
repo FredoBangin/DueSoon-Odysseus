@@ -432,6 +432,30 @@ class SchedulerState(Base):
     )
 
 
+class AcademicUpdateEvent(Base):
+    """Versioned, reviewable changes queued for occasional owner updates."""
+
+    __tablename__ = "academic_update_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_key: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    kind: Mapped[str] = mapped_column(String(50))
+    assignment_id: Mapped[int | None] = mapped_column(ForeignKey("assignments.id", ondelete="RESTRICT"))
+    source_record_id: Mapped[int | None] = mapped_column(ForeignKey("source_records.id", ondelete="RESTRICT"))
+    facts: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    question: Mapped[str | None] = mapped_column(Text)
+    urgent: Mapped[bool] = mapped_column(Boolean, default=False)
+    status: Mapped[str] = mapped_column(String(30), default="pending", index=True)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    discord_delivery_id: Mapped[int | None] = mapped_column(ForeignKey("notification_deliveries.id", ondelete="RESTRICT"), index=True)
+    urgent_delivery_id: Mapped[int | None] = mapped_column(ForeignKey("notification_deliveries.id", ondelete="RESTRICT"))
+    followup_delivery_id: Mapped[int | None] = mapped_column(ForeignKey("notification_deliveries.id", ondelete="RESTRICT"), index=True)
+    notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    followed_up_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    answered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reply_note_id: Mapped[int | None] = mapped_column(ForeignKey("academic_notes.id", ondelete="RESTRICT"))
+
+
 class WebSession(Base):
     __tablename__ = "web_sessions"
 

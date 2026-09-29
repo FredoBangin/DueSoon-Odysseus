@@ -52,6 +52,7 @@ from src.duesoon.notifications.ntfy import NtfyPublishError, NtfyPublisher
 from src.duesoon.notifications.discord import DiscordWebhookPublisher
 from src.duesoon.notifications.mirror import DiscordMirrorService
 from src.duesoon.notifications.service import NotificationService
+from src.duesoon.notifications.updates import AcademicUpdateService
 from src.duesoon.persistence.database import (
     create_engine_from_settings,
     create_schema,
@@ -142,7 +143,7 @@ def create_app(
         runtime_discord_publisher = owned_discord_publisher
     runtime_discord_mirror = DiscordMirrorService(
         runtime_settings, runtime_sessions, runtime_discord_publisher,
-        submission_recheck=runtime_canvas_sync.refresh_submission if runtime_canvas_sync else None,
+        submission_recheck=getattr(runtime_canvas_sync, "refresh_submission", None),
     ) if runtime_settings.discord_enabled else None
     runtime_notifications = NotificationService(
         runtime_settings,
@@ -151,6 +152,10 @@ def create_app(
         discord_mirror=runtime_discord_mirror,
     )
     runtime_auth = AuthService(runtime_settings, runtime_sessions)
+    runtime_academic_updates = AcademicUpdateService(
+        runtime_settings, runtime_sessions, runtime_discord_publisher, runtime_notifications,
+        submission_recheck=getattr(runtime_canvas_sync, "refresh_submission", None),
+    )
     runtime_planning = PlanningService(runtime_sessions)
     runtime_briefing = BriefingService(
         runtime_settings,
@@ -223,6 +228,7 @@ def create_app(
             runtime_canvas_sync,
             runtime_notifications,
             settings=runtime_settings,
+            academic_updates=runtime_academic_updates,
         )
         runtime_scheduler = ReminderScheduler(
             reminder_service,
@@ -265,6 +271,7 @@ def create_app(
     application.state.sessions = runtime_sessions
     application.state.canvas_sync = runtime_canvas_sync
     application.state.notifications = runtime_notifications
+    application.state.academic_updates = runtime_academic_updates
     application.state.reminder_scheduler = runtime_scheduler
     application.state.auth = runtime_auth
     application.state.briefing = runtime_briefing

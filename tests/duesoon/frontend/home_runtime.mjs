@@ -73,7 +73,7 @@ assert(root.querySelectorAll("p").some(item => item.textContent.includes("No wor
 assert(root.querySelectorAll("h2").some(item => item.textContent === "Needs deadline evidence (12)"));
 assert(root.querySelectorAll("p").some(item => item.textContent.includes("AI interpretation is offline")));
 
-renderAssistant(root, "", {availability: "disabled"});
+await renderAssistant(root, "", {availability: "disabled"});
 const form = root.querySelector("form");
 assert(form, "Assistant route must have a working composer");
 const input = form.querySelector("input");
@@ -103,6 +103,12 @@ assert.deepEqual(root.querySelectorAll("h3").map(item => item.textContent), ["Du
 assert(root.querySelectorAll("p").some(item => item.textContent.includes("Sep 23, 2026") && item.textContent.includes("8:05 AM EDT")));
 assert(root.querySelectorAll(".duesoon-notification-entry").some(item => item.textContent.includes("<img src=x onerror=alert(1)>")));
 assert.equal(root.querySelectorAll("img").length, 0, "Source titles must remain escaped text");
+renderNotificationHistory(root, {timezone:"America/New_York", items:[{...notification, provider:"discord",
+  body:"Here's your school update.\n\nDue Today\nSample lab — Mon, Sep 28 at 1:00 PM EDT\n\nRecently completed\nPractice — completed in Canvas\n\nCourse updates\n1 new Canvas announcement recorded.\n\nUpdate window: Monday, September 28 at 8:00 AM EDT.",
+}]});
+assert(root.querySelectorAll("p").some(item => item.textContent === "Here's your school update."), "Discord summary introduction must remain visible");
+assert.deepEqual(root.querySelectorAll("h3").map(item => item.textContent), ["Due Today", "Recently completed", "Course updates"]);
+assert(root.querySelectorAll("p").some(item => item.textContent.startsWith("Update window:")));
 const oldBody = "TEST101-2026-99 | Sample Course: Old lab · due Mon 11:59 PM\nAnother Course: Second lab · due Sun 11:59 PM";
 renderNotificationHistory(root, {timezone:"America/New_York", items:[{...notification, body:oldBody}]});
 assert.equal(root.querySelectorAll(".duesoon-notification-entry").length, 2);
@@ -114,3 +120,20 @@ assert.equal(root.querySelectorAll(".duesoon-notification-entry").length, 1, "A 
 renderNotificationHistory(root, {timezone:"America/New_York", items:[{...notification, kind:"deadline_checkpoint", body:"Sample lab\nDue in 1h"}]});
 assert(root.querySelectorAll("p").some(item => item.textContent === "Sample lab\nDue in 1h"));
 console.log("DueSoon frontend runtime: passed");
+
+// A Discord link opens pinned context but never submits/answers automatically.
+requests.length=0;
+globalThis.fetch=async(path,options={})=>{
+  requests.push({path,payload:options.body?JSON.parse(options.body):null});
+  return {ok:true,status:200,json:async()=>options.body
+    ?{answer:"Saved owner context only.",mode:"deterministic",evidence:[]}
+    :{id:7,title:"School changes",body:"Course updates\nActual announcement excerpt",question:null}};
+};
+await renderAssistant(root,"",{availability:"disabled"},7);
+assert.equal(requests.length,1);
+assert.equal(requests[0].path,"/api/v1/dashboard/academic-updates/7");
+const linkedForm=root.querySelector("form");
+linkedForm.querySelector("input").value="Professor said this is practice. It had 18 questions.";
+await linkedForm.listeners.submit({preventDefault(){}});
+assert.equal(requests[1].payload.update_id,7);
+assert(requests[1].payload.question.includes("18 questions"));

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, time, timedelta
+import logging
 from typing import Callable
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -53,6 +54,7 @@ class ReminderService:
         assignment_projector: Callable[[Assignment], EffectiveAssignment] = (
             project_canvas_assignment
         ),
+        academic_updates=None,
     ) -> None:
         self._sessions = sessions
         self._canvas_sync = canvas_sync
@@ -60,6 +62,7 @@ class ReminderService:
         self._settings = settings
         self._clock = clock
         self._assignment_projector = assignment_projector
+        self._academic_updates = academic_updates
 
     def run_once(self) -> ReminderRunSummary:
         self._canvas_sync.sync()
@@ -178,6 +181,11 @@ class ReminderService:
             dry_run += 1
 
         self._advance_watermark(now)
+        if self._academic_updates is not None:
+            try:
+                self._academic_updates.run_once()
+            except Exception:
+                logging.getLogger(__name__).warning("Academic updates deferred; primary reminders are unaffected")
         return ReminderRunSummary(sent=sent, suppressed=suppressed, dry_run=dry_run)
 
     def _send_daily_digest(

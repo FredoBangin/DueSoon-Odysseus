@@ -1,4 +1,4 @@
-import {post} from "../api.js";
+import {get,post} from "../api.js";
 import {node,assistantCard} from "./home.js";
 
 function attachDecisionTrace(body,value){
@@ -70,10 +70,18 @@ function attachFeedback(reply,value){
   reply.append(controls);
 }
 
-export function renderAssistant(root,initial="",status={}){
+export async function renderAssistant(root,initial="",status={},updateId=null){
   root.replaceChildren();
   const log=node("div");
   root.append(assistantCard(ask,status),log);
+  if(updateId){
+    const context=await get(`/api/v1/dashboard/academic-updates/${updateId}`);
+    const panel=node("article","","admin-card");
+    panel.append(node("h2",context.title));
+    for(const paragraph of context.body.split(/\n\n/))panel.append(node("p",paragraph));
+    panel.append(node("p","Reply in your own words. Extra context is saved in Notes; deadline changes still require evidence review.","admin-toggle-sub"));
+    log.append(panel);
+  }
 
   async function ask(question){
     const user=node("div","","msg msg-user");
@@ -81,7 +89,7 @@ export function renderAssistant(root,initial="",status={}){
     user.querySelector(".body").textContent=question;
     log.append(user);
     try{
-      const value=await post("/api/v1/dashboard/assistant",{question});
+      const value=await post("/api/v1/dashboard/assistant",{question,...(updateId?{update_id:updateId}:{})});
       const reply=node("div","","msg msg-ai");
       reply.innerHTML='<div class="role">DueSoon</div><div class="body"></div>';
       const body=reply.querySelector(".body");

@@ -21,26 +21,30 @@ def settings(**values: object) -> DueSoonSettings:
                            discord_webhook_url=WEBHOOK, **values)
 
 
-def test_discord_embed_matches_log_style_and_confirms_message_without_mentions(caplog) -> None:
+def test_discord_embed_is_readable_and_confirms_message_without_mentions(caplog) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.params["wait"] == "true"
         payload = json.loads(request.content)
         assert payload["allowed_mentions"] == {"parse": []}
-        assert payload["username"] == "DueSoon"
+        assert payload["username"] == "Bob, From DueSoon"
         embed = payload["embeds"][0]
-        assert embed["author"]["name"] == "🖥️ DUESOON LOG"
+        assert "author" not in embed  # Preserve the owner's removal of the duplicate name.
+        assert embed["title"] == "DueSoon briefing"
         assert embed["color"] == 0xF39C12
         assert embed["timestamp"] == NOW.isoformat()
-        assert embed["description"].startswith("```text\n 1 [2026-09-28 08:30:00 EDT] DueSoon briefing")
+        assert embed["description"].startswith("**Due Today**\nSample lab")
         assert "Mon, Sep 28 at 11:59 PM EDT" in embed["description"]
-        assert embed["description"].count("```") == 2
+        assert "```" not in embed["description"]
+        assert " 1 " not in embed["description"]
+        assert "Monday, September 28, 2026" in embed["footer"]["text"]
+        assert r"\[fake\](https://evil.test)" in embed["description"]
         return httpx.Response(200, json={"id": "discord-message-1"})
 
     publisher = DiscordWebhookPublisher(
         settings(), client=httpx.Client(transport=httpx.MockTransport(handler)), clock=lambda: NOW,
     )
     with caplog.at_level(logging.INFO, logger="httpx"):
-        result = publisher.publish(title="DueSoon briefing", message="Sample lab — Mon, Sep 28 at 11:59 PM EDT\n``` @everyone")
+        result = publisher.publish(title="DueSoon briefing", message="Due Today\nSample lab — Mon, Sep 28 at 11:59 PM EDT\n``` @everyone [fake](https://evil.test)")
     assert result.provider_message_id == "discord-message-1"
     assert "fake-webhook-secret" not in caplog.text
     assert "[Discord webhook redacted]" in caplog.text
